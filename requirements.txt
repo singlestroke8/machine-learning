@@ -1,0 +1,22 @@
+# Data Manipulation & EDA
+pandas
+numpy
+matplotlib
+seaborn
+ydata-profiling
+
+# Machine Learning
+scikit-learn
+lightgbm
+optuna
+
+# API & Web
+fastapi
+uvicorn[standard]
+pydantic
+
+# Code Quality & Testing
+ruff
+mypy
+pytest
+python-dotenv
