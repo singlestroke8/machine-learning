@@ -1,6 +1,8 @@
 import os
 import sys
 import logging
+import pandas as pd
+from typing import Dict
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate
 from sklearn.pipeline import Pipeline
 from lightgbm import LGBMClassifier
@@ -13,7 +15,7 @@ from utils import load_data, build_preprocessor, save_model, save_metrics
 # ロギングの設定
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
-def evaluate_cv(pipeline: Pipeline, X, y, model_name: str) -> dict:
+def evaluate_cv(pipeline: Pipeline, X: pd.DataFrame, y: pd.Series, model_name: str) -> Dict[str, float]:
     """【修正】5-Fold クロスバリデーションによる厳密な評価を行う"""
     # ターゲットの割合（解約の有無）を維持したまま5分割する設定
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)

@@ -3,11 +3,12 @@ import json
 import logging
 import joblib
 import pandas as pd
+from typing import Tuple, List, Dict, Any
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
 # --- 1. データ読み込みの共通化 ---
-def load_data(file_path: str, target_col: str = 'Churn') -> tuple:
+def load_data(file_path: str, target_col: str = 'Churn') -> tuple[pd.DataFrame, pd.Series]:
     """データを読み込み、特徴量(X)と正解ラベル(y)に分割する"""
     logging.info(f"データを読み込んでいます: {file_path}")
     df = pd.read_csv(file_path)
@@ -17,7 +18,7 @@ def load_data(file_path: str, target_col: str = 'Churn') -> tuple:
     return X, y
 
 # --- 2. 前処理定義の共通化 ---
-def build_preprocessor(numeric_features: list, categorical_features: list) -> ColumnTransformer:
+def build_preprocessor(numeric_features: List[str], categorical_features: List[str]) -> ColumnTransformer:
     """数値・カテゴリそれぞれに対する前処理器を構築する"""
     return ColumnTransformer(
         transformers=[
@@ -28,13 +29,13 @@ def build_preprocessor(numeric_features: list, categorical_features: list) -> Co
     )
 
 # --- 3. 保存処理の共通化 ---
-def save_model(model, output_path: str) -> None:
+def save_model(model: Any, output_path: str) -> None:
     """学習済みモデルを保存する"""
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     joblib.dump(model, output_path)
     logging.info(f"✅ モデルを保存しました: {output_path}")
 
-def save_metrics(metrics: dict, output_path: str) -> None:
+def save_metrics(metrics: Dict[str, float], output_path: str) -> None:
     """評価指標をJSONファイルとして保存する"""
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w', encoding='utf-8') as f:
