@@ -1,16 +1,17 @@
+import logging
 import os
 import sys
-import logging
-import pandas as pd
 from typing import Dict
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_validate
-from sklearn.pipeline import Pipeline
+
+import pandas as pd
 from lightgbm import LGBMClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.model_selection import StratifiedKFold, cross_validate, train_test_split
+from sklearn.pipeline import Pipeline
 
 # utilsをインポート
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from utils import load_data, build_preprocessor, save_model, save_metrics
+from utils import build_preprocessor, load_data, save_metrics, save_model
 
 # ロギングの設定
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -87,7 +88,7 @@ def main() -> None:
         pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('classifier', model)])
 
         logging.info("\n--- クロスバリデーション評価を開始 ---")
-        metrics = evaluate_cv(pipeline, X_train, y_train, "LightGBM (Baseline)")
+        # metrics = evaluate_cv(pipeline, X_train, y_train, "LightGBM (Baseline)")
 
         # 最終学習と評価
         logging.info("\n--- 最終モデルの学習と評価 ---")

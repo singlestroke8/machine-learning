@@ -1,11 +1,13 @@
-import os
 import json
 import logging
+import os
+from typing import Any, Dict, List
+
 import joblib
 import pandas as pd
-from typing import Tuple, List, Dict, Any
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
 
 # --- 1. データ読み込みの共通化 ---
 def load_data(file_path: str, target_col: str = 'Churn') -> tuple[pd.DataFrame, pd.Series]:

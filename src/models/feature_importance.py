@@ -1,8 +1,9 @@
-import os
 import logging
-import pandas as pd
+import os
+
 import joblib
 import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
 
 # ロギングの設定
@@ -70,7 +71,7 @@ def main() -> None:
         logging.info("=================================")
 
     except FileNotFoundError:
-        logging.error(f"エラー: モデルファイルが見つかりません。先に train.py や tune.py を実行してください。")
+        logging.error("エラー: モデルファイルが見つかりません。先に train.py や tune.py を実行してください。")
     except Exception as e:
         logging.error(f"予期せぬエラーが発生しました: {e}")
 

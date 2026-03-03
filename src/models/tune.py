@@ -1,16 +1,17 @@
-import os
+import json
 import logging
-import pandas as pd
+import os
+
 import joblib
 import optuna
-from optuna.samplers import TPESampler
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+import pandas as pd
 from lightgbm import LGBMClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, make_scorer
-import json
+from optuna.samplers import TPESampler
+from sklearn.compose import ColumnTransformer
+from sklearn.metrics import accuracy_score, f1_score, make_scorer, precision_score, recall_score, roc_auc_score
+from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 # Optunaのログが多すぎるので、INFOレベル（最適化の結果のみ）に制限
 optuna.logging.set_verbosity(optuna.logging.INFO)
@@ -120,12 +121,19 @@ def main() -> None:
         y_pred = best_pipeline.predict(X_test)
         y_proba = best_pipeline.predict_proba(X_test)[:, 1]
 
+        # 計算結果を一度「変数」に格納する
+        acc = accuracy_score(y_test, y_pred)
+        prec = precision_score(y_test, y_pred)
+        rec = recall_score(y_test, y_pred)
+        f1 = f1_score(y_test, y_pred)
+        auc = roc_auc_score(y_test, y_proba)
+
         logging.info("=== 最終モデル (Tuned LightGBM) テストデータ評価 ===")
-        logging.info(f"Accuracy : {accuracy_score(y_test, y_pred):.4f}")
-        logging.info(f"Precision: {precision_score(y_test, y_pred):.4f}")
-        logging.info(f"Recall   : {recall_score(y_test, y_pred):.4f} (解約者の発見率)")
-        logging.info(f"F1-score : {f1_score(y_test, y_pred):.4f}")
-        logging.info(f"ROC-AUC  : {roc_auc_score(y_test, y_proba):.4f}")
+        logging.info(f"Accuracy : {acc:.4f}")
+        logging.info(f"Precision: {prec:.4f}")
+        logging.info(f"Recall   : {rec:.4f} (解約者の発見率)")
+        logging.info(f"F1-score : {f1:.4f}")
+        logging.info(f"ROC-AUC  : {auc:.4f}")
         
         # 指標を辞書（キーと値のペア）にまとめる
         final_metrics = {

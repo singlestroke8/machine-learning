@@ -1,7 +1,8 @@
-import os
 import logging
-import pandas as pd
+import os
+
 import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
 
 # ロギングの設定
@@ -42,7 +43,8 @@ def main() -> None:
         plot_numerical_vs_target(df, "tenure", "Churn", os.path.join(output_dir, "tenure_vs_churn.png"))
 
         # 2. 月額料金 (MonthlyCharges) と 解約 (Churn) の関係
-        plot_numerical_vs_target(df, "MonthlyCharges", "Churn", os.path.join(output_dir, "monthly_charges_vs_churn.png"))
+        plot_numerical_vs_target(df, "MonthlyCharges", "Churn", os.path.join(output_dir, 
+                                                                            "monthly_charges_vs_churn.png"))
 
         # 3. 契約形態 (Contract) と 解約 (Churn) の関係
         plot_categorical_vs_target(df, "Contract", "Churn", os.path.join(output_dir, "contract_vs_churn.png"))

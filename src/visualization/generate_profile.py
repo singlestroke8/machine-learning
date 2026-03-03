@@ -1,7 +1,7 @@
+import logging
+
 import pandas as pd
 from ydata_profiling import ProfileReport
-import logging
-import os
 
 # ロギングの設定（printの代わりに実務で使う標準的な方法）
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
