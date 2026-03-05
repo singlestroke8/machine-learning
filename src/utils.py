@@ -1,13 +1,41 @@
+import os
 import json
 import logging
-import os
-from typing import Any, Dict, List
-
 import joblib
 import pandas as pd
+from typing import Tuple, List, Dict, Any
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
+# --- 0. ロガー設定の共通化（新規追加） ---
+def setup_logger(name: str, log_file: str = "logs/app.log") -> logging.Logger:
+    """コンソールとファイルの両方にログを出力するロガーを設定・取得する"""
+    logger = logging.getLogger(name)
+    
+    # 既に設定済みの場合はスキップ（ログが二重に出るのを防ぐ）
+    if logger.hasHandlers():
+        return logger
+        
+    logger.setLevel(logging.INFO)
+    
+    # プロ仕様のフォーマット（実行日時 - 重要度 - ファイル名 - メッセージ）
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - [%(filename)s] - %(message)s')
+    
+    # コンソール出力用ハンドラ
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+    
+    # ファイル出力用ハンドラ
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    return logger
+
+# utils.py自身で使うためのロガーを準備
+logger = setup_logger(__name__)
 
 # --- 1. データ読み込みの共通化 ---
 def load_data(file_path: str, target_col: str = 'Churn') -> tuple[pd.DataFrame, pd.Series]:
@@ -28,7 +56,7 @@ def build_preprocessor(numeric_features: List[str], categorical_features: List[s
             ('cat', OneHotEncoder(handle_unknown='ignore', sparse_output=False), categorical_features)
         ],
         remainder='passthrough'
-    )
+    ).set_output(transform="pandas")
 
 # --- 3. 保存処理の共通化 ---
 def save_model(model: Any, output_path: str) -> None:
