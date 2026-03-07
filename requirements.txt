@@ -13,6 +13,7 @@ optuna
 # API & Web
 fastapi
 uvicorn[standard]
+httpx
 pydantic
 
 # Code Quality & Testing
