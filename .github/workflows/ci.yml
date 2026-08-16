@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master", "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "1"
+
+jobs:
+  quality:
+    name: 静的解析・型検査・単体テスト
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: uv のセットアップ
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: 依存関係のインストール
+        run: uv sync --extra train
+
+      - name: Lint (ruff)
+        run: uv run ruff check --output-format=github .
+
+      - name: 整形チェック (ruff format)
+        run: uv run ruff format --check .
+
+      - name: 型検査 (mypy strict)
+        run: uv run mypy
+
+      - name: 単体テスト
+        run: uv run pytest -m "not slow" --cov --cov-report=xml --cov-report=term-missing
+
+      - name: カバレッジの保存
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: warn
+
+  pipeline:
+    name: パイプライン結合テスト
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: uv のセットアップ
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: 依存関係のインストール
+        run: uv sync --extra train
+
+      # データ生成 → 学習 → 保存 → 推論 が一気通貫で動くことを確認する。
+      # 単体テストが全部通っていても、つないだ瞬間に壊れることがあるため。
+      - name: 結合テスト
+        run: uv run pytest -m slow
+
+      # README に書いてある手順が本当に動くかを、README とは独立に検証する。
+      # 手順書が腐るのは「実行されないから」なので、CI で実行してしまう。
+      - name: README の手順どおりに動かす
+        run: |
+          uv run dfc generate-data
+          uv run dfc train --fast --no-track
+          uv run dfc figures
+          uv run dfc forecast --days 7
+
+      - name: 学習成果物の保存
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-reports
+          path: |
+            reports/metrics.json
+            reports/model_card.md
+            reports/feature_importance.csv
+            reports/figures/
+          if-no-files-found: error
+
+  docker:
+    name: 推論イメージのビルドと疎通確認
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: uv のセットアップ
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      # コンテナに載せるモデルを先に作る
+      - name: モデルの用意
+        run: |
+          uv sync --extra train
+          uv run dfc generate-data
+          uv run dfc train --fast --no-track
+
+      - name: Buildx のセットアップ
+        uses: docker/setup-buildx-action@v3
+
+      - name: イメージのビルド
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: demand-forecast-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 起動して API を叩く
+        run: |
+          docker run -d --name api \
+            -p 8000:8000 \
+            -v "${PWD}/models:/app/models:ro" \
+            demand-forecast-api:ci
+
+          # ヘルスチェックが ok になるまで待つ（最大60秒）
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health | grep -q '"model_loaded":true'; then
+              echo "API is ready"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "API が起動しませんでした"
+              docker logs api
+              exit 1
+            fi
+            sleep 2
+          done
+
+          curl -fsS http://localhost:8000/model
+          docker rm -f api

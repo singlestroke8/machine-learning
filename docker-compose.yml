@@ -1,12 +1,21 @@
+# 推論APIをローカルで本番同等に動かすための構成。
+#
+# モデルはイメージに焼き込まず、ボリュームで渡している。モデルを焼き込むと
+# 再学習のたびにイメージを作り直すことになり、
+# 「コードは変わっていないのにイメージのタグだけ増える」状態になるため。
 services:
-  # サービス名（任意ですが、今回は推論APIなので api とします）
   api:
-    # どのディレクトリの Dockerfile を使ってビルドするか（ . は「ここ」という意味）
-    build: .
-    # 起動した時のコンテナのわかりやすい名前
-    container_name: churn-api-prod
-    # ポートの紐付け（ "ホスト側のPCのポート : コンテナ内部のポート" ）
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: demand-forecast-api:local
+    container_name: demand-forecast-api
     ports:
       - "8000:8000"
-    # 万が一サーバーが落ちても、自動で再起動して復旧させる本番用の最強設定
-    restart: always
+    volumes:
+      # 学習済みモデルを読み取り専用でマウントする
+      - ./models:/app/models:ro
+    environment:
+      DFC_MODEL_PATH: /app/models/model.joblib
+      DFC_LOG_LEVEL: INFO
+    restart: unless-stopped

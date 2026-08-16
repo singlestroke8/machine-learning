@@ -1,12 +1,121 @@
+[project]
+name = "demand-forecast"
+version = "0.1.0"
+description = "店舗×商品の日次需要予測システム（学習記録リポジトリ）"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+# --- 推論サーバに必要な最小依存だけをコアに置く ---
+# 学習にしか使わない依存は optional-dependencies["train"] へ分離し、
+# 本番イメージを軽く保つ（docs/adr/0009-split-serving-and-training-deps.md）
+dependencies = [
+    "fastapi>=0.115",
+    "joblib>=1.4",
+    "lightgbm>=4.5",
+    "numpy>=1.26",
+    "polars>=1.17",
+    "pyarrow>=18",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "pyyaml>=6.0",
+    "scikit-learn>=1.5",
+    "typer>=0.15",
+    "uvicorn[standard]>=0.34",
+]
+
+[project.optional-dependencies]
+train = [
+    "matplotlib>=3.9",
+    "mlflow>=2.19",
+    "optuna>=4.1",
+]
+
+[project.scripts]
+dfc = "demand_forecast.cli:app"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "mypy>=1.14",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "types-pyyaml>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/demand_forecast"]
+
+# ---------------------------------------------------------------------------
+# Lint / Format
+# ---------------------------------------------------------------------------
 [tool.ruff]
-line-length = 119 # 1行の最大文字数
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
 
-# 新しいバージョンのRuffの書き方
 [tool.ruff.lint]
-select = ["E", "F", "I"]
-ignore = []
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "PTH",  # flake8-use-pathlib
+    "RUF",  # ruff 固有
+]
+ignore = [
+    "RUF001", # 全角記号を含むコメント/文字列を許可（日本語ドキュメントのため）
+    "RUF002",
+    "RUF003",
+]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+
+# ---------------------------------------------------------------------------
+# Type check
+# ---------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.10"
-strict = false
+python_version = "3.11"
+files = ["src", "tests"]
+strict = true
+warn_unreachable = true
 ignore_missing_imports = true
+# ライブラリ側の型が緩い箇所まで strict を適用すると保守コストが見合わないため、
+# 「自前コードは strict、外部由来は緩める」方針をとる
+disallow_any_explicit = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = true
+# Polars のスカラー（Series.max() / .item() など）は型の上では
+# 「数値 or 日付 or 文字列 or None」という広い union になる。src 側は
+# polars_utils の絞り込みヘルパーを通しているが、テストの素朴な比較
+# （units.min() >= 0 など）まで同じ手当てをするのは割に合わないため、
+# テストに限ってこの2つの検査を外す。
+disable_error_code = ["operator", "type-arg"]
+
+# ---------------------------------------------------------------------------
+# Test
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "slow: 実行に時間がかかるテスト（CI の smoke ジョブでのみ実行）",
+]
+
+[tool.coverage.run]
+source = ["src/demand_forecast"]
+omit = ["*/cli.py"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

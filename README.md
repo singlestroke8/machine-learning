@@ -1,96 +1,316 @@
-# 顧客解約予測 AIシステム (Customer Churn Prediction AI)
+# 需要予測システム（Demand Forecast）
 
-通信キャリアなどのサブスクリプション型ビジネスにおいて、顧客の解約（チャーン）を事前に予測し、引き留め施策を支援するための機械学習APIおよびWebアプリケーションです。
+[![CI](https://github.com/singlestroke8/machine-learning/actions/workflows/ci.yml/badge.svg)](https://github.com/singlestroke8/machine-learning/actions/workflows/ci.yml)
 
-## 🎯 ビジネス課題と目的
-* **課題:** 既存顧客の解約は、新規顧客獲得の5倍のコストがかかると言われています（1:5の法則）。しかし、全顧客に対して一律の引き留めキャンペーン（割引など）を行うと、利益率が圧迫されます。
-* **解決策:** 顧客の属性データ（契約期間、月額料金、オプション加入状況など）から、LightGBMを用いて「解約リスク」を高精度に予測。リスクが高い顧客にのみターゲットを絞った効果的なマーケティング施策を可能にします。
+店舗×商品の日次需要を、**1〜14日先まで予測区間つきで**予測する機械学習システム。
+データ生成から学習・評価・推論APIまでを一気通貫で動かせる。
 
-## 🏗 アーキテクチャ図
-フロントエンドとバックエンドを完全に分離し、モダンなAPI駆動アーキテクチャを採用しています。
+このリポジトリは**機械学習エンジニアリングの学習記録**である。
+コードだけでなく、**なぜその設計にしたか**（[設計判断の記録](docs/adr/)）と
+**何に詰まってどう解決したか**（[学習ログ](docs/log/)）を残している。
 
-```mermaid
-graph LR
-    A[ユーザー/営業担当] -->|ブラウザ操作| B(Streamlit Web UI)
-    B -->|JSONデータ送信| C{FastAPI 推論API}
-    C -->|特徴量入力| D[(LightGBM 学習済みモデル)]
-    D -->|予測結果| C
-    C -->|JSONレスポンス| B
-    B -->|結果を可視化| A
+---
+
+## 解いている課題
+
+小売・EC の発注担当は毎日「明日から2週間、何をいくつ仕入れるか」を決めている。
+仕入れすぎれば在庫と廃棄、少なすぎれば欠品と機会損失になる。
+
+このとき「明日 100 個売れます」という点予測だけでは判断できない。
+**需要のばらつきが分からないと、安全在庫を決められない**からである。
+
+そこで本システムは、点予測に加えて**予測区間**を返す。
+
+```
+2026-07-01  中央値 109 個   80%区間 [ 83, 147 ]   → 欠品を避けるなら 147 個
+2026-07-02  中央値 108 個   80%区間 [ 90, 155 ]
 ```
 
-* **Frontend:** Streamlit (Python)
-* **Backend:** FastAPI (Python)
-* **Machine Learning:** scikit-learn, LightGBM
-* **Infrastructure:** Docker, Docker Compose
+## 結果
 
-## 🚀 環境構築と起動手順
-本システムは、バックエンドAPIをDockerでコンテナ化しており、環境に依存せず簡単に起動可能です。
+**単独の数字には意味がない**ので、下からベースライン、上から理論下限で挟んで示す。
 
-### 前提条件
-* Docker および Docker Compose がインストールされていること
-* Python 3.10以上 がインストールされていること（フロントエンド起動用）
+```
+  何もしない                        本モデル              理論的に不可能
+  ────────────────────────────────────────────────────────────────────
+  ナイーブ       0.5006
+  季節性ナイーブ  0.4823
+  移動平均       0.4107  ────────>  0.2859  ────────>  0.2816
+                                    ↑                   ↑
+                            ベースライン比 30.4% 改善    ノイズフロア
+```
 
-### 1. バックエンドAPIの起動（Docker）
-リポジトリをクローンし、プロジェクトルートディレクトリで以下のコマンドを実行します。
+| | WAPE（小さいほど良い） |
+| --- | --- |
+| 理論下限（真の期待需要を知っていても避けられない誤差） | 0.2816 |
+| **本モデル（LightGBM 分位点回帰）** | **0.2859** |
+| 最良ベースライン（移動平均） | 0.4107 |
+
+**学習可能な余地の 96.7% を回収済み。理論下限まで残り 0.0043。**
+
+この数字が重要なのは、**「これ以上モデルを磨いても意味がない」と判断できる**ためである。
+ハイパーパラメータを追い込んでも最大 1.5% しか改善しない。
+次にやるべきは別の情報源を取りに行くこと、というのが数字から導ける結論になる。
+
+```bash
+uv run dfc noise-floor   # 上記をその場で再現できる
+```
+
+<details>
+<summary>詳細な指標（クリックで展開）</summary>
+
+拡大窓の時系列CV（3分割 × 28日）における平均。
+
+| 指標 | 平均 | 標準偏差 |
+| --- | --- | --- |
+| WAPE | 0.2859 | 0.0126 |
+| MAE | 21.535 | 0.715 |
+| RMSE | 33.377 | 1.852 |
+| sMAPE | 0.3002 | 0.0120 |
+| bias | -0.0714 | 0.0200 |
+| 区間カバー率 | 0.7342 | 0.0222 |
+
+horizon 別 WAPE は 1日先 0.2851 〜 14日先 0.2873 でほぼ横ばい。
+誤差の大半がノイズフロアなので、horizon による劣化がそこに埋もれている
+（＝合成データが定常的すぎることの表れでもある）。
+
+重要度上位の特徴量: `feat_price`（計画売価）、`org_target_dow_mean`（同一曜日の直近平均）、
+`cal_yearly_sin_2`（年周期）、`feat_price_ratio_28`（直近28日平均に対する価格比）。
+価格と曜日周期が効いており、生成器に組み込んだ構造をモデルが捉えられていることが確認できる。
+
+生データ: [`reports/metrics.json`](reports/metrics.json) /
+モデルカード: [`reports/model_card.md`](reports/model_card.md) /
+実験一覧: [`docs/experiments.md`](docs/experiments.md)
+
+</details>
+
+## 設計上の要点
+
+### 1. リークを「構造的に」起こせないようにした
+
+時系列予測で最も起きやすく、最も気づきにくい事故が
+「予測時点では知り得ない情報を特徴量に混ぜる」ことである。
+エラーが出ないまま検証スコアだけが良くなるので、気づく手がかりがない。
+
+対策として、**origin（予測基準日）側の特徴量と target（予測対象日）側の行を別々に作り、
+必ず horizon 日ずらして結合する**構造にした。結合はコード中の1か所だけである。
+
+```
+origin 日 o の特徴量  ──(o + h 日にずらす)──>  target 日 t = o + h の行に結合
+```
+
+さらにこの性質を、実装ではなく**外から観測できる振る舞い**としてテストで縛った。
+
+```python
+# 未来の実績を10倍に改変しても、過去の特徴量が1ビットも変わらないこと
+tampered = 改変後のデータ
+assert before.equals(after)
+```
+
+対になる逆向きのテスト（origin 以前を変えたら特徴量は変わること）も置いて、
+テスト自体が空振りしていないことを保証している。
+加えて、学習時と推論時で同じ行に同じ特徴量が生成されることも検査している
+（training-serving skew の防止）。
+
+→ [ADR-0004](docs/adr/0004-horizon-aware-features.md) / [`tests/test_leakage.py`](tests/test_leakage.py)
+
+### 2. 評価をビジネスの判断に接続した
+
+主要指標に **WAPE** を採用している。MAPE は実需が小さい日に発散するため、
+需要の薄いSKUの誤差を潰すことにモデルが最適化され、主力SKUの精度を犠牲にする。
+WAPE は分母が総需要なので発散せず、「在庫全体で何%外したか」とそのまま言い換えられる。
+
+さらに **bias（過大／過小予測の偏り）を必ず併記する**。
+在庫では「平均何%外すか」より「どちらに偏るか」が直接効く
+（過大 → 廃棄、過小 → 欠品）。実測の -7.1% は中央値予測の構造的な性質であり、
+用途によって補正の要否が変わる。
+
+→ [ADR-0006](docs/adr/0006-primary-metric-wape.md)
+
+### 3. 単一モデルで 1〜14日先すべてを扱う
+
+horizon ごとにモデルを分ける（direct）と、分位点3本と掛けて 42 モデルの運用になる。
+このプロジェクトの規模には過剰なので、**horizon を特徴量として持つ単一モデル**にした。
+
+精度面の妥協なので、**horizon 別の WAPE を必ず出力する**設計にして、
+どこで劣化しているかが常に見えるようにしている。
+
+→ [ADR-0004](docs/adr/0004-horizon-aware-features.md)
+
+## 動かす
+
+前提: [uv](https://docs.astral.sh/uv/)（Python のパッケージ管理）
+
+```bash
+# 1. 依存関係（学習用ライブラリを含む）
+uv sync --extra train
+
+# 2. 需要データを生成（合成データ。認証情報もダウンロードも不要）
+uv run dfc generate-data
+
+# 3. 学習・評価・モデル保存（約2分）
+uv run dfc train
+
+# 4. 予測してみる
+uv run dfc forecast --store S01 --sku SKU01
+```
+
+```
+origin=2026-06-30 / store=S01 / sku=SKU01
+date          h    point    lower    upper
+2026-07-01    1     60.7     51.5    105.1
+2026-07-02    2     64.0     56.3    116.7
+2026-07-03    3    122.7     76.3    149.4
+2026-07-04    4    142.1     79.8    155.7
+...
+2026-07-14   14     65.8     56.1    112.7
+```
+
+週末（7/3〜7/5）に需要が跳ねる曜日周期を、14日先まで捉えられている。
+
+その他のコマンド:
+
+```bash
+uv run dfc noise-floor   # 誤差の理論下限を推定し、学習結果と突き合わせる
+uv run dfc figures       # 特徴量重要度・バックテストの図を生成
+uv run dfc tune          # Optuna でハイパーパラメータ探索
+uv run dfc serve         # 推論APIを起動
+make help                # 全コマンドの一覧
+```
+
+## 推論API
+
+```bash
+uv run dfc serve          # http://localhost:8000/docs で OpenAPI が見られる
+```
+
+Docker で動かす場合（学習用ライブラリを含まない軽量イメージ）:
+
 ```bash
 docker compose up --build
 ```
 
-### 2. フロントエンドWeb画面の起動（Streamlit）
-別のターミナルを開き、必要なライブラリをインストールした上でStreamlitを起動します。
-```bash
-pip install streamlit requests
-streamlit run frontend/app.py
-```
+### `POST /forecast`
 
-* **Web UI:** `http://localhost:8501`
+実績の系列と、予測対象日の価格・販促計画を送ると、予測区間つきの需要予測を返す。
 
-## 🔌 APIエンドポイント仕様
-FastAPIにより、自動でOpenAPI仕様のドキュメントが生成されます。
+<details>
+<summary>リクエスト / レスポンス例</summary>
 
-### `POST /predict`
-顧客データを受け取り、解約予測結果を返します。
-
-**リクエストボディ (JSON):**
 ```json
 {
-  "tenure": 12,
-  "MonthlyCharges": 85.50,
-  "Contract": "Month-to-month",
-  "gender": "Female",
-  "SeniorCitizen": 0,
-  "Partner": "Yes",
-  "Dependents": "No",
-  "InternetService": "Fiber optic",
-  "PaymentMethod": "Electronic check",
-  "PaperlessBilling": "Yes",
-  "PhoneService": "Yes",
-  "MultipleLines": "No",
-  "OnlineSecurity": "No",
-  "OnlineBackup": "Yes",
-  "DeviceProtection": "No",
-  "TechSupport": "No",
-  "StreamingTV": "Yes",
-  "StreamingMovies": "No",
-  "Num_Additional_Services": 2
+  "store_id": "S01",
+  "sku_id": "SKU01",
+  "history": [
+    { "date": "2026-03-01", "units_sold": 23, "price": 480.0, "promo_flag": 0 }
+  ],
+  "future": [
+    { "date": "2026-07-01", "price": 430.0, "promo_flag": 1 }
+  ]
 }
 ```
 
-**レスポンス (JSON):**
 ```json
 {
-  "prediction": 1,
-  "probability": 0.7302,
-  "message": "High risk of churn (解約リスク高)"
+  "store_id": "S01",
+  "sku_id": "SKU01",
+  "origin_date": "2026-06-30",
+  "lower_quantile": 0.1,
+  "upper_quantile": 0.9,
+  "forecasts": [
+    { "date": "2026-07-01", "horizon": 1, "point": 109.16, "lower": 82.57, "upper": 147.35 },
+    { "date": "2026-07-02", "horizon": 2, "point": 108.27, "lower": 90.08, "upper": 154.86 }
+  ],
+  "model_trained_at": "2026-08-16T02:54:47+00:00"
 }
 ```
 
-### `GET /health`
-APIサーバーの死活監視（ヘルスチェック）用エンドポイントです。正常稼働時は以下のレスポンスを返します。
-```json
-{
-  "status": "ok",
-  "message": "API is running correctly."
-}
+</details>
+
+入力の検証は「モデルに渡す前に落ちるべきものを落とす」方針にしている。
+履歴の日付に穴がある、予測対象日が origin 以前、学習した horizon より先を要求している
+── いずれも 422 で理由つきに弾く。**黙って外挿しない**ことを重視した。
+
+### その他のエンドポイント
+
+| | 内容 |
+| --- | --- |
+| `GET /health` | 死活監視。モデルが読み込めているかまで返す |
+| `GET /model` | 稼働中モデルの素性（学習日時、horizon、CV精度） |
+
+モデルが読めない状態でもサーバは起動し、`/health` が `degraded` を返す。
+起動時に落とすとクラッシュループになり、原因がログから追いにくくなるため。
+
+## リポジトリ構成
+
 ```
+src/demand_forecast/
+├── config.py           設定の型付き読み込み（起動時に構造と型を検証）
+├── analysis.py         誤差の理論下限（ノイズフロア）の推定
+├── data/
+│   ├── generate.py     需要データの合成生成器
+│   └── loaders.py      入出力とスキーマ検証（日付の連続性まで検査）
+├── features/
+│   ├── calendar.py     カレンダー特徴量（日本の祝日を含む）
+│   ├── lags.py         origin 時点の系列特徴量
+│   └── pipeline.py     ★ origin と target の結合（リーク防止の中核）
+├── models/
+│   ├── splits.py       拡大窓の時系列CV
+│   ├── metrics.py      WAPE ほかの評価指標
+│   ├── baselines.py    ナイーブ／季節性ナイーブ／移動平均
+│   ├── estimator.py    LightGBM 分位点回帰とモデル保存形式
+│   ├── train.py        学習パイプライン
+│   ├── predict.py      推論のサービス層
+│   └── tune.py         Optuna による探索
+└── api/                FastAPI 推論サーバ
+
+conf/config.yaml        全実行パラメータ（1ファイルに集約）
+docs/adr/               設計判断の記録
+docs/log/               学習ログ
+tests/                  テスト117件（うちリーク検査5件）
+```
+
+## 品質保証
+
+| 項目 | 内容 |
+| --- | --- |
+| テスト | pytest 117件。リーク検査・学習推論の特徴量一致・パイプライン結合テストを含む |
+| 型検査 | mypy **strict**（`src` は例外なく通過） |
+| 静的解析 | ruff（pycodestyle / pyflakes / isort / pyupgrade / bugbear / simplify / pathlib） |
+| CI | GitHub Actions で 3ジョブ：静的解析＋単体テスト / パイプライン結合 / Dockerビルドと疎通確認 |
+
+CI では **README に書いた手順をそのまま実行する**ジョブを置いている。
+手順書が腐るのは実行されないからなので、CI で実行してしまう方針にした。
+
+## 既知の限界
+
+案件で使う前に把握しておくべき点を、隠さずに書いておく。
+
+| 限界 | 内容 |
+| --- | --- |
+| **予測区間が公称より狭い** | 80%区間のはずが実測カバー率 0.734。分位点回帰の過学習と見ている。**このままでは在庫計画に使えない。** conformal prediction による較正が次の課題 |
+| **合成データである** | 実データ特有の汚さ（欠品による打ち切り、記録漏れ、系列の出入り）を扱っていない。実データに差し替えたら、ここに載っている数字はすべて意味を持たない |
+| **過小予測に偏る** | bias -7.1%。中央値予測は右に歪んだ需要分布の合計を過小評価する。在庫の総量計画に使うなら補正が要る |
+| **価格・販促は既知の前提** | 「計画値として予測時点で確定している」前提を置いている。価格が事前に確定しない業務にはそのまま適用できない |
+| **Dockerイメージが未検証** | 開発環境のネットワークポリシーでレジストリ通信が遮断されており、ビルド検証ができていない。CI の docker ジョブで初めて検証される |
+
+限界と次の一手は [`docs/experiments.md`](docs/experiments.md) に整理している。
+
+## 技術スタック
+
+| 領域 | 採用 | 選定理由 |
+| --- | --- | --- |
+| パッケージ管理 | uv | ロックファイルによる再現性、解決の速さ |
+| データ処理 | Polars | 系列ごとの時系列演算で順序事故を起こさない（[ADR-0003](docs/adr/0003-polars-over-pandas.md)） |
+| モデル | LightGBM 分位点回帰 | 表形式・数十万行の規模に適し、分布の仮定なしに区間を出せる（[ADR-0007](docs/adr/0007-quantile-regression.md)） |
+| 実験管理 | MLflow (SQLite) | ファイルストアは MLflow 3 で非推奨（[ADR-0008](docs/adr/0008-experiment-tracking.md)） |
+| API | FastAPI + Pydantic v2 | スキーマ駆動で入力検証と OpenAPI を同時に得る |
+| 品質 | ruff / mypy strict / pytest | |
+| 配布 | Docker マルチステージ | 推論イメージに学習用ライブラリを入れない（[ADR-0009](docs/adr/0009-split-serving-and-training-deps.md)） |
+
+## ドキュメント
+
+- [設計判断の記録（ADR）](docs/adr/) — なぜその設計にしたか。全9件
+- [学習ログ](docs/log/) — 何を学び、どこで詰まり、どう解決したか
+- [実験記録](docs/experiments.md) — 試した手法と結果（効かなかったものも含む）
+- [モデルカード](reports/model_card.md) — モデルの素性と使用上の注意（自動生成）

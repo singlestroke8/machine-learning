@@ -1,4 +1,42 @@
-data/
-kaggle.json
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- ツールのキャッシュ ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- 生成物（コードから再現できるものは追跡しない） ---
+# 先頭の / でリポジトリ直下に限定する。付け忘れると
+# src/demand_forecast/data/ や src/demand_forecast/models/ まで巻き添えで除外される。
+/data/
+/models/
+/mlruns/
+/mlflow.db
+/mlartifacts/
+/logs/
+
+# reports 配下は「成果として見せるテキスト」だけ追跡し、
+# 画像と中間データは追跡しない（再生成できるうえ、差分が読めないため）
+/reports/figures/
+/reports/*.parquet
+
+# --- 秘匿情報 ---
 .env
-MEMO.md
+.env.*
+!.env.example
+*.pem
+credentials.json
+
+# --- エディタ / OS ---
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json
