@@ -16,7 +16,10 @@ htmlcov/
 # --- 生成物（コードから再現できるものは追跡しない） ---
 # 先頭の / でリポジトリ直下に限定する。付け忘れると
 # src/demand_forecast/data/ や src/demand_forecast/models/ まで巻き添えで除外される。
-/data/
+/data/*
+# サンプルだけは追跡する。リポジトリを見た人が、実行しなくても
+# データの列構成と値の雰囲気を確認できるようにするため。
+!/data/sample/
 /models/
 /mlruns/
 /mlflow.db
