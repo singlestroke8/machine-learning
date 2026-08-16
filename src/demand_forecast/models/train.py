@@ -111,12 +111,13 @@ def _write_model_card(
     )
 
     metric_lines = "\n".join(
-        f"| {k.removesuffix('_mean')} | {v:.4f} | {summary.get(k.replace('_mean', '_std'), 0):.4f} |"
-        for k, v in sorted(summary.items())
-        if k.endswith("_mean")
+        f"| {key.removesuffix('_mean')} | {value:.4f} | {summary.get(key[:-5] + '_std', 0):.4f} |"
+        for key, value in sorted(summary.items())
+        if key.endswith("_mean")
     )
 
-    content = f"""# モデルカード: 需要予測モデル
+    content = (
+        f"""# モデルカード: 需要予測モデル
 
 自動生成ファイル（`uv run dfc train` で更新される）。手で編集しない。
 
@@ -144,11 +145,13 @@ def _write_model_card(
 | 手法 | WAPE |
 | --- | --- |
 | **本モデル** | **{summary.get("wape_mean", float("nan")):.4f}** |
-""" + "\n".join(
-        f"| {k.removesuffix('_wape_mean')} | {v:.4f} |"
-        for k, v in sorted(baseline_summary.items())
-        if k.endswith("_wape_mean")
-    ) + f"""
+"""
+        + "\n".join(
+            f"| {k.removesuffix('_wape_mean')} | {v:.4f} |"
+            for k, v in sorted(baseline_summary.items())
+            if k.endswith("_wape_mean")
+        )
+        + f"""
 
 ## horizon 別の精度
 
@@ -167,6 +170,7 @@ def _write_model_card(
 - 学習期間から大きく離れた将来（構造変化後）には外挿できない。
   定期的な再学習を前提とする。
 """
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     logger.info("モデルカードを書き出しました: %s", path)

@@ -95,7 +95,8 @@ def expanding_window_folds(
         if train_end < start:
             msg = (
                 f"データ期間 {start}〜{end} が短く、"
-                f"n_splits={n_splits}, val_days={val_days}, gap_days={gap_days} では分割できません。"
+                f"n_splits={n_splits}, val_days={val_days}, gap_days={gap_days}"
+                " では分割できません。"
                 " 期間を延ばすか、n_splits / val_days を小さくしてください。"
             )
             raise ValueError(msg)
@@ -112,9 +113,9 @@ def expanding_window_folds(
     return folds
 
 
-def split_frame(frame: pl.DataFrame, fold: Fold, *, date_col: str = "date") -> tuple[
-    pl.DataFrame, pl.DataFrame
-]:
+def split_frame(
+    frame: pl.DataFrame, fold: Fold, *, date_col: str = "date"
+) -> tuple[pl.DataFrame, pl.DataFrame]:
     """フレームを fold の学習部分・検証部分に分ける。"""
     train = frame.filter(
         (pl.col(date_col) >= fold.train_start) & (pl.col(date_col) <= fold.train_end)

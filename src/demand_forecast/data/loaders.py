@@ -102,10 +102,7 @@ def _assert_contiguous_dates(df: pl.DataFrame) -> None:
     )
     if not gaps.is_empty():
         sample = gaps.select(["store_id", "sku_id", "date", "_gap"]).head(5).to_dicts()
-        msg = (
-            f"日付が連続していない系列があります（{gaps.height} 箇所）。"
-            f" 先頭のみ表示: {sample}"
-        )
+        msg = f"日付が連続していない系列があります（{gaps.height} 箇所）。 先頭のみ表示: {sample}"
         raise DataValidationError(msg)
 
 

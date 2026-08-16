@@ -90,11 +90,16 @@ def forecast(
     quantiles = sorted(predictions)
     lower_q, upper_q = quantiles[0], quantiles[-1]
 
-    return frame.select(["date", *_KEY_COLS, "feat_horizon"]).with_columns(
-        pl.Series("point", np.round(predictions[0.5], 2), dtype=pl.Float64),
-        pl.Series("lower", np.round(predictions[lower_q], 2), dtype=pl.Float64),
-        pl.Series("upper", np.round(predictions[upper_q], 2), dtype=pl.Float64),
-        pl.lit(lower_q, dtype=pl.Float64).alias("lower_quantile"),
-        pl.lit(upper_q, dtype=pl.Float64).alias("upper_quantile"),
-        pl.lit(origin_date).alias("origin_date"),
-    ).rename({"feat_horizon": "horizon"}).sort(["date", *_KEY_COLS])
+    return (
+        frame.select(["date", *_KEY_COLS, "feat_horizon"])
+        .with_columns(
+            pl.Series("point", np.round(predictions[0.5], 2), dtype=pl.Float64),
+            pl.Series("lower", np.round(predictions[lower_q], 2), dtype=pl.Float64),
+            pl.Series("upper", np.round(predictions[upper_q], 2), dtype=pl.Float64),
+            pl.lit(lower_q, dtype=pl.Float64).alias("lower_quantile"),
+            pl.lit(upper_q, dtype=pl.Float64).alias("upper_quantile"),
+            pl.lit(origin_date).alias("origin_date"),
+        )
+        .rename({"feat_horizon": "horizon"})
+        .sort(["date", *_KEY_COLS])
+    )

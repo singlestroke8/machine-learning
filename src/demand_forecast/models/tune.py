@@ -66,9 +66,7 @@ def run_tuning(cfg: Config) -> dict[str, Any]:
     try:
         import optuna
     except ImportError as exc:  # pragma: no cover - 環境依存
-        msg = (
-            "optuna が未インストールです。`uv sync --extra train` を実行してください。"
-        )
+        msg = "optuna が未インストールです。`uv sync --extra train` を実行してください。"
         raise ImportError(msg) from exc
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
