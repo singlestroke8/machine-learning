@@ -25,6 +25,28 @@ DEFAULT_GROUP_COLS: tuple[str, ...] = ("store_id", "sku_id")
 # 同一曜日の傾向をとらえるために遡る週数
 _SAME_DOW_WEEKS = 4
 
+# Polars の曜日表現（月曜=1 〜 日曜=7）
+_WEEKDAYS: tuple[int, ...] = (1, 2, 3, 4, 5, 6, 7)
+
+# 曜日ごとの集計に使う作業列（戻り値には残さない）
+_DOW_COL = "_dow"
+_DOW_MEAN_COL = "_dow_mean"
+
+
+def same_dow_columns() -> list[str]:
+    """曜日ごとの中間カラム名を返す（結合後に落とすために使う）。"""
+    return [f"org_dowlast_w{d}" for d in _WEEKDAYS] + [f"org_dowmean_w{d}" for d in _WEEKDAYS]
+
+
+def select_target_dow(prefix: str, date_col: str = "date") -> pl.Expr:
+    """target の曜日に対応する列を、行ごとに選ぶ式を返す。
+
+    horizon から固定のオフセットを計算する方式は、祝日を挟むと曜日がずれる。
+    target の曜日そのものを見て選べば、暦日でも営業日でも正確になる。
+    """
+    target_dow = pl.col(date_col).dt.weekday()
+    return pl.coalesce([pl.when(target_dow == d).then(pl.col(f"{prefix}{d}")) for d in _WEEKDAYS])
+
 
 def add_origin_features(
     df: pl.DataFrame,
@@ -45,8 +67,8 @@ def add_origin_features(
 
     Args:
         df: 需要データ。
-        lags: origin からのラグ日数（1 = origin 当日）。
-        windows: 移動集計の窓幅（日数）。origin 当日を含む。
+        lags: origin からのラグ（1 = origin 当日）。単位はステップ。
+        windows: 移動集計の窓幅（ステップ数）。origin 当日を含む。
         group_cols: 系列を識別するカラム。
         date_col: 日付カラム名。
         target_col: 実績カラム名。
@@ -57,8 +79,13 @@ def add_origin_features(
         ``org_`` 接頭辞の特徴量を追加した DataFrame。
     """
     group = list(group_cols)
-    out = df.sort([*group, date_col])
     y = pl.col(target_col).cast(pl.Float64)
+
+    # 曜日ごとの集計に使う作業列。同じ曜日だけを集めた並びの上で移動平均をとる
+    out = df.sort([*group, date_col]).with_columns(pl.col(date_col).dt.weekday().alias(_DOW_COL))
+    out = out.with_columns(
+        y.rolling_mean(_SAME_DOW_WEEKS).over([*group, _DOW_COL]).alias(_DOW_MEAN_COL)
+    )
 
     exprs: list[pl.Expr] = []
 
@@ -71,17 +98,31 @@ def add_origin_features(
         exprs.append(y.rolling_mean(window_size=w).over(group).alias(f"org_roll_mean_{w}"))
         exprs.append(y.rolling_std(window_size=w).over(group).alias(f"org_roll_std_{w}"))
 
-    # --- 同一曜日の実績 ---
-    # r = 0..6 は「origin から何日前が target と同じ曜日か」に対応する。
-    # どの r を使うかは horizon で決まるため、ここでは 7 通りすべてを作り、
-    # pipeline 側で該当する 1 本だけを選ぶ。
-    for r in range(7):
-        # 直近の同一曜日（季節性ナイーブ予測そのもの）
-        exprs.append(y.shift(r).over(group).alias(f"org_dowlast_r{r}"))
-        # 直近4回の同一曜日の平均（単発のブレをならしたもの）
-        shifts = [y.shift(r + 7 * w) for w in range(_SAME_DOW_WEEKS)]
-        mean_expr = sum(shifts[1:], start=shifts[0]) / _SAME_DOW_WEEKS
-        exprs.append(mean_expr.over(group).alias(f"org_dowmean_r{r}"))
+    # --- 曜日ごとの直近実績 ---
+    # 「origin から何ステップ前が target と同じ曜日か」を固定の数で表すことはできない。
+    # 暦日なら7ステップ前だが、営業日軸では祝日を挟んだ週だけ間隔が縮む。
+    # そこで曜日ごとに「その曜日で最後に観測した値」を持たせ、
+    # pipeline 側が target の曜日に応じて該当する1本を選ぶ。祝日があっても正確になる。
+    for weekday in _WEEKDAYS:
+        on_weekday = pl.col(_DOW_COL) == weekday
+        # その曜日の直近実績（季節性ナイーブ予測そのもの）
+        exprs.append(
+            pl.when(on_weekday)
+            .then(y)
+            .otherwise(None)
+            .forward_fill()
+            .over(group)
+            .alias(f"org_dowlast_w{weekday}")
+        )
+        # その曜日の直近4回の平均（単発のブレをならしたもの）
+        exprs.append(
+            pl.when(on_weekday)
+            .then(pl.col(_DOW_MEAN_COL))
+            .otherwise(None)
+            .forward_fill()
+            .over(group)
+            .alias(f"org_dowmean_w{weekday}")
+        )
 
     # --- 価格・販促の直近状況 ---
     exprs.extend(
@@ -101,27 +142,4 @@ def add_origin_features(
         ]
     )
 
-    return out.with_columns(exprs)
-
-
-def same_dow_offset(horizon: int) -> int:
-    """target と同じ曜日になる直近の日が origin の何日前かを返す。
-
-    target の曜日は origin の曜日から ``horizon`` 日進んだもの。したがって
-    origin 以前で target と同じ曜日になる直近の日は ``(-horizon) % 7`` 日前。
-    """
-    return (-horizon) % 7
-
-
-def same_dow_columns(horizon: int) -> dict[str, str]:
-    """horizon に対応する同一曜日カラムの、旧名 -> 新名の対応を返す。"""
-    r = same_dow_offset(horizon)
-    return {
-        f"org_dowlast_r{r}": "org_target_dow_last",
-        f"org_dowmean_r{r}": "org_target_dow_mean",
-    }
-
-
-def all_same_dow_columns() -> list[str]:
-    """同一曜日カラム名を全通り返す（不要分の削除に使う）。"""
-    return [f"org_dowlast_r{r}" for r in range(7)] + [f"org_dowmean_r{r}" for r in range(7)]
+    return out.with_columns(exprs).drop(_DOW_COL, _DOW_MEAN_COL)

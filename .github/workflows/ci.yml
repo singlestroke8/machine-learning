@@ -72,12 +72,21 @@ jobs:
 
       # README に書いてある手順が本当に動くかを、README とは独立に検証する。
       # 手順書が腐るのは「実行されないから」なので、CI で実行してしまう。
-      - name: README の手順どおりに動かす
+      - name: README の手順どおりに動かす（小売・暦日軸）
         run: |
           uv run dfc generate-data
           uv run dfc train --fast --no-track
           uv run dfc figures
           uv run dfc forecast --days 7
+
+      # 時間軸が違うだけで同じコードが動くことを、CI で毎回確かめる。
+      # 営業日軸の事故（週をまたぐ行が黙って消える等）は数字を見ても気づけない。
+      - name: README の手順どおりに動かす（法人取引・営業日軸）
+        run: |
+          uv run dfc generate-transactions
+          uv run dfc build-demand -c conf/b2b.yaml
+          uv run dfc train -c conf/b2b.yaml --fast --no-track
+          uv run dfc forecast -c conf/b2b.yaml --days 5
 
       - name: 学習成果物の保存
         uses: actions/upload-artifact@v4

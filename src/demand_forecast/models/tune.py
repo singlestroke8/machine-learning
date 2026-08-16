@@ -71,7 +71,7 @@ def run_tuning(cfg: Config) -> dict[str, Any]:
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-    demand = read_demand_frame(cfg.paths.raw)
+    demand = read_demand_frame(cfg.paths.raw, calendar=cfg.features.calendar)
     encoder = SeriesEncoder.fit(demand)
     frame = encoder.transform(build_training_frame(demand, cfg.features))
     features = feature_columns(frame)
@@ -79,8 +79,8 @@ def run_tuning(cfg: Config) -> dict[str, Any]:
     folds = expanding_window_folds(
         frame.get_column("date"),
         n_splits=cfg.cv.n_splits,
-        val_days=cfg.cv.val_days,
-        gap_days=cfg.cv.gap_days,
+        val_steps=cfg.cv.val_steps,
+        gap_steps=cfg.cv.gap_steps,
     )
     splits = [split_frame(frame, fold) for fold in folds]
 

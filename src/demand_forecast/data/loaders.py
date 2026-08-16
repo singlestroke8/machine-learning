@@ -8,9 +8,13 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 
 import polars as pl
+
+from demand_forecast.config import CalendarMode
+from demand_forecast.features.calendar import business_days
 
 DEMAND_SCHEMA: dict[str, pl.DataType] = {
     "date": pl.Date(),
@@ -28,13 +32,19 @@ class DataValidationError(ValueError):
     """入力データがスキーマ・整合性の要件を満たさない場合に送出する。"""
 
 
-def validate_demand_frame(df: pl.DataFrame, *, require_contiguous: bool = True) -> pl.DataFrame:
+def validate_demand_frame(
+    df: pl.DataFrame,
+    *,
+    calendar: CalendarMode = "daily",
+    require_contiguous: bool = True,
+) -> pl.DataFrame:
     """需要データの構造と整合性を検証する。
 
     Args:
         df: 検証対象。
-        require_contiguous: 系列ごとに日付が1日刻みで連続していることを
-            要求するか。推論時の履歴など、部分的なデータには ``False`` を渡す。
+        calendar: 期待する時間軸。``daily`` なら全暦日、``business`` なら営業日のみ。
+        require_contiguous: 時間軸に欠けがないことを要求するか。
+            推論時の履歴など、部分的なデータには ``False`` を渡す。
 
     Returns:
         検証を通過した DataFrame（キー順にソート済み）。
@@ -83,30 +93,67 @@ def validate_demand_frame(df: pl.DataFrame, *, require_contiguous: bool = True) 
         msg = f"promo_flag が 0/1 以外の行が {invalid_promo} 行あります。"
         raise DataValidationError(msg)
 
+    _assert_series_share_timeline(df)
     if require_contiguous:
-        _assert_contiguous_dates(df)
+        _assert_timeline_is_complete(df, calendar)
 
     return df.sort(_KEY_COLS)
 
 
-def _assert_contiguous_dates(df: pl.DataFrame) -> None:
-    """系列ごとに日付が1日刻みで連続していることを確認する。"""
-    gaps = (
-        df.sort(["store_id", "sku_id", "date"])
-        .with_columns(
-            (pl.col("date") - pl.col("date").shift(1).over(["store_id", "sku_id"]))
-            .dt.total_days()
-            .alias("_gap")
+def _assert_series_share_timeline(df: pl.DataFrame) -> None:
+    """すべての系列が同じ日付を持つことを確認する。
+
+    ラグや移動集計は「行の位置」で動くため、系列ごとに日付がずれていると
+    同じ ``shift(1)`` が系列によって違う日を指してしまう。
+    エラーにならないまま特徴量がずれる典型例なので、ここで弾く。
+    """
+    per_series = df.group_by(["store_id", "sku_id"]).agg(pl.len().alias("n"))
+    counts = sorted(set(per_series.get_column("n").to_list()))
+    if len(counts) > 1:
+        sample = per_series.sort("n").head(3).to_dicts()
+        msg = (
+            f"系列ごとに行数が異なります（{counts[:5]} ...）。"
+            f" すべての系列を同じ日付で揃えてください。先頭のみ表示: {sample}"
         )
-        .filter(pl.col("_gap").is_not_null() & (pl.col("_gap") != 1))
-    )
-    if not gaps.is_empty():
-        sample = gaps.select(["store_id", "sku_id", "date", "_gap"]).head(5).to_dicts()
-        msg = f"日付が連続していない系列があります（{gaps.height} 箇所）。 先頭のみ表示: {sample}"
         raise DataValidationError(msg)
 
 
-def read_demand_frame(path: Path | str, *, validate: bool = True) -> pl.DataFrame:
+def _assert_timeline_is_complete(df: pl.DataFrame, calendar: CalendarMode) -> None:
+    """時間軸に欠けがないことを確認する。
+
+    ``daily`` なら全暦日、``business`` なら営業日がすべて揃っている必要がある。
+    営業日データを ``daily`` として検証すれば土日が「不足」と報告されるので、
+    設定と実データの食い違いもここで気づける。
+    """
+    observed = sorted(set(df.get_column("date").to_list()))
+    start, end = observed[0], observed[-1]
+
+    if calendar == "business":
+        expected = business_days(start, end)
+        label = "営業日"
+    else:
+        expected = []
+        current = start
+        while current <= end:
+            expected.append(current)
+            current += dt.timedelta(days=1)
+        label = "暦日"
+
+    missing = sorted(set(expected) - set(observed))
+    extra = sorted(set(observed) - set(expected))
+    if missing or extra:
+        msg = (
+            f"時間軸（{label}）に欠けまたは余分があります。"
+            f" 不足 {len(missing)} 件 / 余分 {len(extra)} 件。"
+            f" 不足の先頭: {[str(d) for d in missing[:5]]}"
+            f" 余分の先頭: {[str(d) for d in extra[:5]]}"
+        )
+        raise DataValidationError(msg)
+
+
+def read_demand_frame(
+    path: Path | str, *, calendar: CalendarMode = "daily", validate: bool = True
+) -> pl.DataFrame:
     """Parquet から需要データを読み込む。
 
     Raises:
@@ -120,7 +167,7 @@ def read_demand_frame(path: Path | str, *, validate: bool = True) -> pl.DataFram
         )
         raise FileNotFoundError(msg)
     df = pl.read_parquet(file_path)
-    return validate_demand_frame(df) if validate else df
+    return validate_demand_frame(df, calendar=calendar) if validate else df
 
 
 def write_frame(df: pl.DataFrame, path: Path | str) -> Path:

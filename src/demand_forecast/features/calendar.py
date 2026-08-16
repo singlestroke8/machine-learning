@@ -98,6 +98,23 @@ def japanese_holiday_flags(dates: Sequence[dt.date]) -> np.ndarray:
     return flags
 
 
+def business_days(start: dt.date, end: dt.date) -> list[dt.date]:
+    """営業日（平日かつ祝日でない日）を昇順で返す。
+
+    法人取引のデータでは、この列が時間軸そのものになる。
+    ``japanese_holiday_flags`` が年末年始も休日として扱うので、
+    12/30〜1/3 も営業日から外れる。
+    """
+    days: list[dt.date] = []
+    current = start
+    while current <= end:
+        days.append(current)
+        current += dt.timedelta(days=1)
+
+    holiday = japanese_holiday_flags(days)
+    return [d for d, flag in zip(days, holiday, strict=True) if d.weekday() < 5 and flag == 0]
+
+
 def add_calendar_features(
     df: pl.DataFrame,
     *,

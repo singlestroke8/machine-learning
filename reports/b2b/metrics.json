@@ -1,0 +1,121 @@
+{
+  "trained_at": "2026-08-16T10:19:15+00:00",
+  "fast_mode": false,
+  "n_train_rows": 218250,
+  "n_features": 42,
+  "n_series": 30,
+  "folds": [
+    {
+      "index": 0,
+      "train_start": "2022-01-05",
+      "train_end": "2024-10-02",
+      "val_start": "2024-10-03",
+      "val_end": "2024-10-31",
+      "train_steps": 672,
+      "val_steps": 20,
+      "_repr": "fold0: train 2022-01-05〜2024-10-02 (672ステップ) / val 2024-10-03〜2024-10-31 (20ステップ)"
+    },
+    {
+      "index": 1,
+      "train_start": "2022-01-05",
+      "train_end": "2024-10-31",
+      "val_start": "2024-11-01",
+      "val_end": "2024-11-29",
+      "train_steps": 692,
+      "val_steps": 20,
+      "_repr": "fold1: train 2022-01-05〜2024-10-31 (692ステップ) / val 2024-11-01〜2024-11-29 (20ステップ)"
+    },
+    {
+      "index": 2,
+      "train_start": "2022-01-05",
+      "train_end": "2024-11-29",
+      "val_start": "2024-12-02",
+      "val_end": "2024-12-27",
+      "train_steps": 712,
+      "val_steps": 20,
+      "_repr": "fold2: train 2022-01-05〜2024-11-29 (712ステップ) / val 2024-12-02〜2024-12-27 (20ステップ)"
+    }
+  ],
+  "cv_summary": {
+    "bias_mean": -0.10607158944923677,
+    "bias_std": 0.03787127443635722,
+    "interval_coverage_mean": 0.7009444444444445,
+    "interval_coverage_std": 0.03262506799576666,
+    "interval_nominal_mean": 0.8000000000000002,
+    "interval_nominal_std": 1.1102230246251565e-16,
+    "mae_mean": 32.269583813933,
+    "mae_std": 2.902821357178254,
+    "pinball_q0.1_mean": 5.779811168823208,
+    "pinball_q0.1_std": 0.6755827735680144,
+    "pinball_q0.5_mean": 16.1347919069665,
+    "pinball_q0.5_std": 1.451410678589127,
+    "pinball_q0.9_mean": 10.021356014694076,
+    "pinball_q0.9_std": 0.9593634833944469,
+    "rmse_mean": 76.08197445628888,
+    "rmse_std": 7.956995692155686,
+    "smape_mean": 0.6422048963746327,
+    "smape_std": 0.050121115496728826,
+    "wape_mean": 0.37920926542743455,
+    "wape_std": 0.03134925519692681
+  },
+  "baseline_summary": {
+    "moving_average_wape_mean": 0.5299961472237155,
+    "moving_average_wape_std": 0.07640968927776734,
+    "naive_wape_mean": 0.6558142532659764,
+    "naive_wape_std": 0.06979933069177166,
+    "seasonal_naive_wape_mean": 0.6682200243117178,
+    "seasonal_naive_wape_std": 0.0758627422394954
+  },
+  "horizon_wape": [
+    {
+      "horizon": 1,
+      "n_rows": 1800,
+      "wape": 0.37613325988484275
+    },
+    {
+      "horizon": 2,
+      "n_rows": 1800,
+      "wape": 0.37979903961189954
+    },
+    {
+      "horizon": 3,
+      "n_rows": 1800,
+      "wape": 0.38135175461982523
+    },
+    {
+      "horizon": 4,
+      "n_rows": 1800,
+      "wape": 0.38111970857479466
+    },
+    {
+      "horizon": 5,
+      "n_rows": 1800,
+      "wape": 0.377861104817047
+    },
+    {
+      "horizon": 6,
+      "n_rows": 1800,
+      "wape": 0.3764932020295852
+    },
+    {
+      "horizon": 7,
+      "n_rows": 1800,
+      "wape": 0.37862747690156456
+    },
+    {
+      "horizon": 8,
+      "n_rows": 1800,
+      "wape": 0.3797216949712817
+    },
+    {
+      "horizon": 9,
+      "n_rows": 1800,
+      "wape": 0.3803389533796304
+    },
+    {
+      "horizon": 10,
+      "n_rows": 1800,
+      "wape": 0.3806464594838739
+    }
+  ]
+}

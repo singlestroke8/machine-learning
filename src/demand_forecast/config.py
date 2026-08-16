@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -69,10 +69,19 @@ class TransactionsConfig(BaseModel):
         return v
 
 
+#: 時間軸の刻み方。
+#: - ``daily``: 暦日。小売のように毎日売上が立つデータ向け。1週間 = 7ステップ
+#: - ``business``: 営業日のみ。法人取引のように土日祝に受注が無いデータ向け。1週間 = 5ステップ
+CalendarMode = Literal["daily", "business"]
+
+
 class FeatureConfig(BaseModel):
     """特徴量生成の設定。
 
-    ``horizon`` は「何日先を予測するか」であると同時に、
+    ``horizon``・``lags``・``rolling_windows`` の単位はすべて**ステップ**であり、
+    暦日とは限らない。``calendar`` が ``business`` なら 1 ステップ = 1 営業日になる。
+
+    ``horizon`` は「何ステップ先を予測するか」であると同時に、
     「特徴量が参照してよい情報の打ち切り位置」でもある。
     """
 
@@ -80,6 +89,7 @@ class FeatureConfig(BaseModel):
     lags: list[int]
     rolling_windows: list[int]
     fourier_yearly_order: int = Field(ge=0, le=10)
+    calendar: CalendarMode = "daily"
 
     @field_validator("lags", "rolling_windows")
     @classmethod
@@ -94,11 +104,15 @@ class FeatureConfig(BaseModel):
 
 
 class CVConfig(BaseModel):
-    """時系列クロスバリデーションの設定。"""
+    """時系列クロスバリデーションの設定。
+
+    期間の単位は**ステップ**（``features.calendar`` に従う）であり、暦日ではない。
+    営業日軸なら ``val_steps: 20`` は 20 営業日（約4週間）を意味する。
+    """
 
     n_splits: int = Field(ge=1)
-    val_days: int = Field(ge=1)
-    gap_days: int = Field(ge=0)
+    val_steps: int = Field(ge=1)
+    gap_steps: int = Field(default=0, ge=0)
 
 
 class ModelConfig(BaseModel):

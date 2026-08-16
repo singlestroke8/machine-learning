@@ -29,7 +29,8 @@ htmlcov/
 # reports 配下は「成果として見せるテキスト」だけ追跡し、
 # 画像と中間データは追跡しない（再生成できるうえ、差分が読めないため）
 /reports/figures/
-/reports/*.parquet
+/reports/**/figures/
+/reports/**/*.parquet
 
 # --- 秘匿情報 ---
 .env

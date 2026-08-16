@@ -11,12 +11,7 @@ import datetime as dt
 import polars as pl
 import pytest
 
-from demand_forecast.features.lags import (
-    add_origin_features,
-    all_same_dow_columns,
-    same_dow_columns,
-    same_dow_offset,
-)
+from demand_forecast.features.lags import add_origin_features, same_dow_columns
 
 
 @pytest.fixture
@@ -101,28 +96,21 @@ def test_features_do_not_leak_across_series() -> None:
         assert row.get_column("org_roll_mean_3").item() == pytest.approx(value)
 
 
-@pytest.mark.parametrize(
-    ("horizon", "expected"),
-    [(7, 0), (14, 0), (1, 6), (2, 5), (6, 1), (8, 6)],
-)
-def test_same_dow_offset(horizon: int, expected: int) -> None:
-    """target と同じ曜日が origin の何日前かの計算が合っていること。"""
-    assert same_dow_offset(horizon) == expected
-
-
-def test_same_dow_offset_matches_actual_weekday(toy_frame: pl.DataFrame) -> None:
-    """計算した offset の日が、本当に target と同じ曜日になっていること。"""
-    origin = dt.date(2026, 1, 20)
-    for horizon in range(1, 15):
-        target = origin + dt.timedelta(days=horizon)
-        reference = origin - dt.timedelta(days=same_dow_offset(horizon))
-        assert reference.weekday() == target.weekday()
-
-
-def test_same_dow_columns_are_subset_of_all(toy_frame: pl.DataFrame) -> None:
-    """horizon ごとに選ぶカラムが、実際に生成されるカラムに含まれること。"""
+def test_same_dow_columns_are_generated(toy_frame: pl.DataFrame) -> None:
+    """曜日ごとの参照列が7曜日ぶん生成されること。"""
     out = add_origin_features(toy_frame, lags=[1], windows=[7])
-    generated = set(out.columns)
-    assert set(all_same_dow_columns()) <= generated
-    for horizon in range(1, 15):
-        assert set(same_dow_columns(horizon)) <= generated
+    assert set(same_dow_columns()) <= set(out.columns)
+
+
+def test_same_dow_last_holds_that_weekday_value(toy_frame: pl.DataFrame) -> None:
+    """曜日別の列が、その曜日で最後に観測した値を保持していること。
+
+    2026-01-01 は木曜。値は日付と対応して 1,2,3,... と増えるので、
+    1/20（火）の時点で「直近の火曜」は 1/20 自身（値20）、
+    「直近の月曜」は 1/19（値19）になる。
+    """
+    out = add_origin_features(toy_frame, lags=[1], windows=[7])
+    row = out.filter(pl.col("date") == dt.date(2026, 1, 20))
+    assert row.get_column("org_dowlast_w2").item() == 20.0  # 火曜
+    assert row.get_column("org_dowlast_w1").item() == 19.0  # 月曜
+    assert row.get_column("org_dowlast_w5").item() == 16.0  # 金曜

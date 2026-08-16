@@ -49,7 +49,7 @@ def smoke_config_path(tmp_path: Path) -> Path:
             "rolling_windows": [7, 28],
             "fourier_yearly_order": 2,
         },
-        "cv": {"n_splits": 2, "val_days": 14, "gap_days": 0},
+        "cv": {"n_splits": 2, "val_steps": 14, "gap_steps": 0},
         "model": {
             "quantiles": [0.1, 0.5, 0.9],
             "params": {"n_estimators": 40, "learning_rate": 0.1, "num_leaves": 15},

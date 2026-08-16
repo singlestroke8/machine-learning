@@ -9,7 +9,7 @@ from demand_forecast.features.calendar import (
     add_calendar_features,
     japanese_holiday_flags,
 )
-from demand_forecast.features.lags import add_origin_features, same_dow_offset
+from demand_forecast.features.lags import add_origin_features
 from demand_forecast.features.pipeline import (
     FEATURE_METADATA_KEYS,
     SeriesEncoder,
@@ -29,5 +29,4 @@ __all__ = [
     "categorical_features",
     "feature_columns",
     "japanese_holiday_flags",
-    "same_dow_offset",
 ]

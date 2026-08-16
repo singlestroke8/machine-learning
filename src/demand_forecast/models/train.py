@@ -131,7 +131,7 @@ def _write_model_card(
 | 予測範囲 | 1〜{cfg.features.horizon} 日先 |
 | 学習行数 | {n_rows:,} |
 | 系列数 | {n_series} |
-| 検証方法 | 拡大窓 時系列CV（{cfg.cv.n_splits} 分割 × {cfg.cv.val_days} 日） |
+| 検証方法 | 拡大窓 時系列CV（{cfg.cv.n_splits} 分割 × {cfg.cv.val_steps} ステップ） |
 
 ## 検証結果（CV 平均）
 
@@ -191,7 +191,7 @@ def run_training(cfg: Config, *, fast: bool = False, track: bool = True) -> dict
     reports_dir = Path(cfg.paths.reports_dir)
 
     logger.info("データを読み込みます: %s", cfg.paths.raw)
-    demand = read_demand_frame(cfg.paths.raw)
+    demand = read_demand_frame(cfg.paths.raw, calendar=cfg.features.calendar)
 
     logger.info("特徴量を生成します (horizon=1〜%d)", cfg.features.horizon)
     encoder = SeriesEncoder.fit(demand)
@@ -210,8 +210,8 @@ def run_training(cfg: Config, *, fast: bool = False, track: bool = True) -> dict
     folds = expanding_window_folds(
         frame.get_column("date"),
         n_splits=n_splits,
-        val_days=cfg.cv.val_days,
-        gap_days=cfg.cv.gap_days,
+        val_steps=cfg.cv.val_steps,
+        gap_steps=cfg.cv.gap_steps,
     )
 
     short_window = min(cfg.features.rolling_windows)
@@ -363,7 +363,7 @@ def _log_to_mlflow(cfg: Config, results: dict[str, Any]) -> None:
                 "horizon": cfg.features.horizon,
                 "quantiles": cfg.model.quantiles,
                 "n_splits": cfg.cv.n_splits,
-                "val_days": cfg.cv.val_days,
+                "val_steps": cfg.cv.val_steps,
                 "n_features": results["n_features"],
                 "fast_mode": results["fast_mode"],
                 **{f"lgbm_{k}": v for k, v in cfg.model.params.items()},

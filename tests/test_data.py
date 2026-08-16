@@ -108,11 +108,30 @@ def test_duplicate_keys_are_rejected() -> None:
 
 
 def test_date_gap_is_rejected() -> None:
-    """日付に穴があるデータを弾くこと（ラグが静かにずれるのを防ぐ）。"""
+    """時間軸に穴があるデータを弾くこと（ラグが静かにずれるのを防ぐ）。"""
     df = generate_demand_data(SMALL_CONFIG, seed=1)
     with_gap = df.filter(pl.col("date") != dt.date(2025, 2, 10))
-    with pytest.raises(DataValidationError, match="連続していない"):
+    with pytest.raises(DataValidationError, match="時間軸"):
         validate_demand_frame(with_gap)
+
+
+def test_business_calendar_rejects_calendar_daily_data() -> None:
+    """暦日データを営業日として検証したら、土日が不足として弾かれること。
+
+    設定と実データの食い違いを、学習が終わってから気づくのではなく
+    読み込み時点で落とすための検査。
+    """
+    df = generate_demand_data(SMALL_CONFIG, seed=1)
+    with pytest.raises(DataValidationError, match="営業日"):
+        validate_demand_frame(df, calendar="business")
+
+
+def test_series_with_different_lengths_are_rejected() -> None:
+    """系列ごとに日付がずれているデータを弾くこと。"""
+    df = generate_demand_data(SMALL_CONFIG, seed=1)
+    ragged = df.filter(~((pl.col("sku_id") == "SKU01") & (pl.col("date") == dt.date(2025, 2, 10))))
+    with pytest.raises(DataValidationError, match="行数が異なります"):
+        validate_demand_frame(ragged)
 
 
 def test_date_gap_is_allowed_when_not_required() -> None:

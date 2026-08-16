@@ -37,7 +37,9 @@ transactions:
   reps_per_department: 4
 
 features:
-  # 何日先までを予測対象にするか。特徴量のリーク防止もこの値を基準に行う。
+  # 時間軸の刻み方。daily = 暦日、business = 営業日のみ
+  calendar: daily
+  # 何ステップ先までを予測対象にするか。特徴量のリーク防止もこの値を基準に行う。
   horizon: 14
   # 予測基準日（origin）時点で参照するラグ。origin = 予測対象日 - horizon。
   lags: [1, 2, 3, 7, 14, 28]
@@ -46,11 +48,11 @@ features:
   fourier_yearly_order: 3
 
 cv:
-  # 拡大窓（expanding window）方式の時系列CV
+  # 拡大窓（expanding window）方式の時系列CV。単位はステップ（暦日ではない）
   n_splits: 3
-  val_days: 28
+  val_steps: 28
   # 特徴量が origin = t - horizon で打ち切られているため、追加の gap は不要
-  gap_days: 0
+  gap_steps: 0
 
 model:
   # 点予測は q=0.5、予測区間は q=0.1 / q=0.9 で表現する

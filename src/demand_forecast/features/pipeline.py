@@ -29,8 +29,14 @@ from demand_forecast.config import FeatureConfig
 from demand_forecast.features.calendar import add_calendar_features
 from demand_forecast.features.lags import (
     add_origin_features,
-    all_same_dow_columns,
     same_dow_columns,
+    select_target_dow,
+)
+from demand_forecast.features.steps import (
+    STEP_COL,
+    add_step_column,
+    build_step_index,
+    build_timeline,
 )
 from demand_forecast.polars_utils import as_date
 
@@ -41,6 +47,7 @@ FEATURE_METADATA_KEYS: tuple[str, ...] = (
     "store_id",
     "sku_id",
     "y",
+    STEP_COL,
 )
 
 _KEY_COLS = ["store_id", "sku_id"]
@@ -104,26 +111,33 @@ def _assemble(
     horizon: int,
     feat_cfg: FeatureConfig,
 ) -> pl.DataFrame:
-    """origin 特徴量を horizon 日ずらして target 行に結合する。"""
-    rename_map = same_dow_columns(horizon)
-    unused_dow_cols = [c for c in all_same_dow_columns() if c not in rename_map]
+    """origin 特徴量を horizon ステップずらして target 行に結合する。
 
-    origin_side = (
-        origin_feats.drop(unused_dow_cols)
-        .rename(rename_map)
-        .with_columns(pl.col("date").dt.offset_by(f"{horizon}d").alias("_target_date"))
-    )
+    ずらし方を**暦日の加算ではなくステップの加算**にしているのが要点。
+    暦日で ``+14d`` とすると、営業日軸のデータでは土日を跨いだ時点で
+    対応する行が存在せず、静かに行が落ちる。
+
+    同一曜日の参照も、horizon から固定のオフセットを計算するのではなく
+    target の曜日を見て選ぶ。祝日を挟むと「1週間 = 5営業日」が崩れるため。
+    """
+    origin_side = origin_feats.with_columns((pl.col(STEP_COL) + horizon).alias("_target_step"))
     org_cols = [c for c in origin_side.columns if c.startswith("org_")]
     origin_side = origin_side.select(
-        [pl.col("date").alias("origin_date"), pl.col("_target_date"), *_KEY_COLS, *org_cols]
+        [pl.col("date").alias("origin_date"), pl.col("_target_step"), *_KEY_COLS, *org_cols]
     )
 
     joined = targets.join(
         origin_side,
-        left_on=["date", *_KEY_COLS],
-        right_on=["_target_date", *_KEY_COLS],
+        left_on=[STEP_COL, *_KEY_COLS],
+        right_on=["_target_step", *_KEY_COLS],
         how="inner",
     )
+
+    # 曜日ごとに持っている列から、target の曜日に対応する1本を行ごとに選ぶ
+    joined = joined.with_columns(
+        select_target_dow("org_dowlast_w").alias("org_target_dow_last"),
+        select_target_dow("org_dowmean_w").alias("org_target_dow_mean"),
+    ).drop(same_dow_columns())
 
     short_window = min(feat_cfg.rolling_windows)
     long_window = max(feat_cfg.rolling_windows)
@@ -170,9 +184,23 @@ def build_training_frame(
     Returns:
         1行 = (系列, target 日, horizon) の学習用フレーム。目的変数は ``y``。
     """
-    origin_feats = add_origin_features(df, lags=feat_cfg.lags, windows=feat_cfg.rolling_windows)
-    targets = df.select(
-        ["date", *_KEY_COLS, "price", "promo_flag", pl.col(target_col).cast(pl.Float64).alias("y")]
+    step_index = build_step_index(df.get_column("date").to_list())
+    indexed = add_step_column(df, step_index)
+
+    origin_feats = add_origin_features(
+        indexed,
+        lags=feat_cfg.lags,
+        windows=feat_cfg.rolling_windows,
+    )
+    targets = indexed.select(
+        [
+            "date",
+            STEP_COL,
+            *_KEY_COLS,
+            "price",
+            "promo_flag",
+            pl.col(target_col).cast(pl.Float64).alias("y"),
+        ]
     )
 
     frames = [
@@ -216,13 +244,26 @@ def build_inference_frame(
         raise ValueError(msg)
 
     origin_date = as_date(history.get_column("date").max())
+
+    # 履歴の開始から予測対象の末尾までの「欠けのない時間軸」を作る。
+    # 入力に現れる日付だけで連番を振ると、要求された対象日が飛び飛びのときに
+    # horizon を取り違える（3日先と7日先だけ要求されたら、両方が隣接扱いになる）。
+    history_start = as_date(history.get_column("date").min())
+    future_end = as_date(future.get_column("date").max())
+    timeline = build_timeline(history_start, max(future_end, origin_date), feat_cfg.calendar)
+    step_index = build_step_index(timeline)
+    origin_step = step_index[origin_date]
+
     origin_feats = add_origin_features(
-        history, lags=feat_cfg.lags, windows=feat_cfg.rolling_windows
+        add_step_column(history, step_index),
+        lags=feat_cfg.lags,
+        windows=feat_cfg.rolling_windows,
     ).filter(pl.col("date") == origin_date)
 
-    targets = future.select(
+    targets = add_step_column(future, step_index).select(
         [
             "date",
+            STEP_COL,
             *_KEY_COLS,
             "price",
             "promo_flag",
@@ -231,7 +272,7 @@ def build_inference_frame(
     )
 
     horizons = (
-        targets.select((pl.col("date") - pl.lit(origin_date)).dt.total_days().alias("h"))
+        targets.select((pl.col(STEP_COL) - origin_step).alias("h"))
         .get_column("h")
         .unique()
         .sort()
@@ -248,9 +289,7 @@ def build_inference_frame(
     frames = [
         _assemble(
             origin_feats,
-            targets.filter(
-                (pl.col("date") - pl.lit(origin_date)).dt.total_days() == h,
-            ),
+            targets.filter(pl.col(STEP_COL) - origin_step == h),
             horizon=int(h),
             feat_cfg=feat_cfg,
         )

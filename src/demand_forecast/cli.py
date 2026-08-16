@@ -16,9 +16,10 @@ import polars as pl
 import typer
 
 from demand_forecast import __version__
-from demand_forecast.config import Config, load_config
+from demand_forecast.config import CalendarMode, Config, load_config
 from demand_forecast.data.generate import generate_demand_data
 from demand_forecast.data.loaders import read_demand_frame, validate_demand_frame, write_frame
+from demand_forecast.features.steps import build_timeline
 from demand_forecast.logging_utils import configure_logging, get_logger
 from demand_forecast.polars_utils import as_date, as_float
 
@@ -112,6 +113,42 @@ def generate_transactions_cmd(
     typer.echo(f"出力: {output}")
     typer.echo("=== 検算 ===")
     for key, value in summarize(transactions, cfg.transactions).items():
+        typer.echo(f"  {key}: {value}")
+
+
+@app.command("build-demand")
+def build_demand(
+    config: ConfigOption = None,
+    force: Annotated[bool, typer.Option("--force", help="既存ファイルを上書きする")] = False,
+) -> None:
+    """取引明細を、需要予測が扱える営業日ベースの系列データに集計する。
+
+    出力先は ``paths.raw`` なので、このあと `dfc train` がそのまま学習に使える。
+    """
+    from demand_forecast.data.aggregate import aggregate_transactions
+    from demand_forecast.data.aggregate import summarize as summarize_demand
+
+    cfg = _load(config)
+    source = Path(cfg.transactions.output)
+    output = Path(cfg.paths.raw)
+
+    if not source.exists():
+        typer.echo(f"明細がありません: {source}")
+        typer.echo("先に `uv run dfc generate-transactions` を実行してください。")
+        raise typer.Exit(code=1)
+    if output.exists() and not force:
+        typer.echo(f"既に存在します: {output}（上書きするには --force）")
+        raise typer.Exit(code=0)
+
+    logger.info("明細を読み込みます: %s", source)
+    transactions = pl.read_csv(source, try_parse_dates=True)
+    demand = aggregate_transactions(transactions)
+    write_frame(demand, output)
+
+    typer.echo("")
+    typer.echo(f"出力: {output}")
+    typer.echo("=== 検算 ===")
+    for key, value in summarize_demand(demand).items():
         typer.echo(f"  {key}: {value}")
 
 
@@ -216,12 +253,31 @@ def figures(config: ConfigOption = None) -> None:
         typer.echo(f"生成: {path}")
 
 
+def _future_dates(origin: dt.date, horizon: int, calendar: CalendarMode) -> list[dt.date]:
+    """origin の翌ステップから horizon ステップ先までの日付を返す。
+
+    営業日軸では暦日で数えると休日に当たってしまうため、
+    余裕をもって候補を作り、先頭から必要数だけ取る。
+    """
+    if calendar == "daily":
+        return [origin + dt.timedelta(days=h) for h in range(1, horizon + 1)]
+
+    span = horizon * 3 + 14
+    candidates = build_timeline(
+        origin + dt.timedelta(days=1), origin + dt.timedelta(days=span), calendar
+    )
+    if len(candidates) < horizon:
+        msg = f"{span} 暦日のうちに {horizon} 営業日が確保できませんでした。"
+        raise RuntimeError(msg)
+    return candidates[:horizon]
+
+
 @app.command()
 def forecast(
     config: ConfigOption = None,
-    store: Annotated[str, typer.Option(help="店舗ID")] = "S01",
-    sku: Annotated[str, typer.Option(help="商品ID")] = "SKU01",
-    days: Annotated[int, typer.Option(help="何日先まで予測するか")] = 14,
+    store: Annotated[str | None, typer.Option(help="店舗ID（既定: データ先頭の系列）")] = None,
+    sku: Annotated[str | None, typer.Option(help="商品ID（既定: データ先頭の系列）")] = None,
+    days: Annotated[int, typer.Option(help="何ステップ先まで予測するか")] = 14,
 ) -> None:
     """保存済みモデルで、データ末尾を origin とした予測を出力する。
 
@@ -234,10 +290,21 @@ def forecast(
     cfg = _load(config)
     artifact = ForecastArtifact.load(cfg.api.model_path)
 
-    demand = read_demand_frame(cfg.paths.raw)
+    demand = read_demand_frame(cfg.paths.raw, calendar=cfg.features.calendar)
+    if store is None or sku is None:
+        first = demand.select("store_id", "sku_id").unique().sort("store_id", "sku_id").row(0)
+        store = store if store is not None else str(first[0])
+        sku = sku if sku is not None else str(first[1])
+        typer.echo(f"系列を指定していないため、先頭の系列を使います: {store} / {sku}")
+
     history = demand.filter((pl.col("store_id") == store) & (pl.col("sku_id") == sku))
     if history.is_empty():
-        typer.echo(f"該当する系列がありません: store={store}, sku={sku}")
+        available = demand.select("store_id", "sku_id").unique().sort("store_id", "sku_id")
+        head = ", ".join(f"{r[0]}/{r[1]}" for r in available.head(3).rows())
+        typer.echo(
+            f"該当する系列がありません: store={store}, sku={sku}\n"
+            f"  データにある系列（先頭3件・全{available.height}件）: {head}"
+        )
         raise typer.Exit(code=1)
 
     origin = as_date(history.get_column("date").max())
@@ -246,7 +313,7 @@ def forecast(
 
     future = pl.DataFrame(
         {
-            "date": [origin + dt.timedelta(days=h) for h in range(1, horizon + 1)],
+            "date": _future_dates(origin, horizon, cfg.features.calendar),
             "store_id": [store] * horizon,
             "sku_id": [sku] * horizon,
             "price": [last_price] * horizon,
