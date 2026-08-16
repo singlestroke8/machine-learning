@@ -17,7 +17,8 @@
 - 期初（4月・10月）と夏季休暇（8月）の落ち込み
 - 月末（25日以降）に締めの受注が寄る
 - 部署ごとの得意商材（営業1部=PC寄り、ソリューション営業部=ソフトウェア寄り）
-- 顧客ごとの値引率と、値引きに応じた数量の増加（価格弾力性）
+- 顧客ごとの値引き交渉力と、値引きに応じた数量の増加（価格弾力性）
+- 値引きは商材の粗利が確保できる範囲まで（原価割れの受注はしない）
 - PC は薄利・ソフトウェアは高利益率という原価率の差
 
 意図的に組み込んでいない要素（実データとの差分）:
@@ -136,6 +137,12 @@ _MONTH_START_FACTOR = 0.85
 #: 値引きが数量を押し上げる強さ（価格弾力性の簡易表現）
 _DISCOUNT_ELASTICITY = 1.8
 
+#: 値引き後も確保する最低粗利率。これを下回る値引きはしない
+_MIN_MARGIN_RATIO = 0.05
+
+#: 商談上の値引き上限。原価に余裕があっても、これ以上は値引かない
+_MAX_DISCOUNT = 0.35
+
 #: 数量のばらつき（ガンマ・ポアソン混合の形状パラメータ）
 _OVERDISPERSION_SHAPE = 6.0
 
@@ -169,8 +176,10 @@ class Customer:
     name: str
     prefecture: str
     rep: SalesRep
-    #: 顧客ごとの基準値引率。大口ほど大きい
-    discount_rate: float
+    #: 値引き交渉力（0〜1）。商材ごとの値引き上限に対する比率として使う。
+    #: 絶対値ではなく比率にすることで、商材ごとに上限が違っても
+    #: 「A社は強気、B社は控えめ」という顧客差が保たれる。
+    negotiation_power: float
     #: 受注の起きやすさ
     activity: float
     #: 1回あたりの購入規模
@@ -216,7 +225,7 @@ def build_customers(
                 name=f"{chr(ord('A') + index % 26)}{'' if index < 26 else index // 26}株式会社",
                 prefecture=prefecture,
                 rep=reps[index % len(reps)],
-                discount_rate=float(np.clip(0.03 + 0.06 * scale, 0.0, 0.28)),
+                negotiation_power=float(np.clip(0.15 + 0.35 * scale, 0.05, 1.0)),
                 activity=float(np.clip(0.35 + 0.22 * scale, 0.1, 0.9)),
                 size=float(np.clip(0.5 + 0.6 * scale, 0.3, 3.0)),
             )
@@ -234,6 +243,17 @@ def business_days(start: dt.date, end: dt.date) -> list[dt.date]:
 
     holiday = japanese_holiday_flags(days)
     return [d for d, flag in zip(days, holiday, strict=True) if d.weekday() < 5 and flag == 0]
+
+
+def max_discount_for(product: Product) -> float:
+    """商材ごとの値引き上限を返す。
+
+    原価率が高い商材ほど値引き余地が小さい。上限を超えると逆ざや（原価割れ）に
+    なるため、最低粗利率を差し引いた値でクリップする。
+    実務でも「ハードは値引き余地が小さく、ソフトは大きい」というのが通例で、
+    この上限があることで PC とソフトウェアの値引き幅の差が自然に生まれる。
+    """
+    return min(1.0 - product.cost_ratio - _MIN_MARGIN_RATIO, _MAX_DISCOUNT)
 
 
 def _seasonal_factor(day: dt.date) -> float:
@@ -291,8 +311,16 @@ def generate_transactions(cfg: TransactionsConfig, seed: int = 42) -> pl.DataFra
             for product_index in chosen:
                 product = PRODUCTS[product_index]
 
-                # 値引率は顧客の取引条件を基準に、案件ごとに少し振れる
-                discount = float(np.clip(customer.discount_rate + rng.normal(0.0, 0.02), 0.0, 0.35))
+                # 値引率は「商材ごとの上限 × 顧客の交渉力」を基準に、案件ごとに少し振れる。
+                # 上限でクリップするので、原価割れ（逆ざや）の受注は発生しない。
+                max_discount = max_discount_for(product)
+                discount = float(
+                    np.clip(
+                        max_discount * customer.negotiation_power + rng.normal(0.0, 0.015),
+                        0.0,
+                        max_discount,
+                    )
+                )
                 unit_price = int(round(product.list_price * (1.0 - discount), -1))
                 cost_unit = int(round(product.list_price * product.cost_ratio, -1))
 

@@ -21,6 +21,7 @@ from demand_forecast.data.transactions import (
     build_sales_reps,
     business_days,
     generate_transactions,
+    max_discount_for,
     summarize,
 )
 from demand_forecast.polars_utils import as_float
@@ -156,6 +157,31 @@ def test_discount_reduces_unit_price(transactions: pl.DataFrame) -> None:
     assert transactions.filter(pl.col("販売単価") > pl.col("定価")).is_empty()
     discounted = transactions.filter(pl.col("値引率") > 0.05)
     assert discounted.filter(pl.col("販売単価") >= pl.col("定価")).is_empty()
+
+
+def test_no_negative_margin(transactions: pl.DataFrame) -> None:
+    """原価割れ（逆ざや）の受注が発生しないこと。
+
+    値引率が粗利率を超えると販売単価が原価単価を下回る。
+    初版はこれを見落としており、PC の明細の3%が赤字になっていた。
+    値引き上限を商材ごとに設けて解消したが、金額の整合性テストでは
+    符号までは見ていなかったため気づけなかった。**符号は別に検査する。**
+    """
+    loss = transactions.filter(pl.col("粗利") < 0)
+    assert loss.is_empty(), f"原価割れの明細が {loss.height} 件あります"
+    assert transactions.filter(pl.col("販売単価") < pl.col("原価単価")).is_empty()
+
+
+def test_discount_ceiling_differs_by_product(transactions: pl.DataFrame) -> None:
+    """値引き上限が商材ごとに異なること（ハードは小さく、ソフトは大きい）。"""
+    for product in PRODUCTS:
+        ceiling = max_discount_for(product)
+        actual = transactions.filter(pl.col("品名") == product.name).get_column("値引率")
+        assert actual.max() <= ceiling + 1e-9, f"{product.name} が値引き上限を超えています"
+
+    pc_ceiling = max(max_discount_for(p) for p in PRODUCTS if p.category == "PC")
+    software_ceiling = min(max_discount_for(p) for p in PRODUCTS if p.category == "ソフトウェア")
+    assert pc_ceiling < software_ceiling
 
 
 def test_quantities_and_prices_are_positive(transactions: pl.DataFrame) -> None:
