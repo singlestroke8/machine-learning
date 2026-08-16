@@ -302,7 +302,7 @@ CI では **README に書いた手順をそのまま実行する**ジョブを�
 | --- | --- | --- |
 | パッケージ管理 | uv | ロックファイルによる再現性、解決の速さ |
 | データ処理 | Polars | 系列ごとの時系列演算で順序事故を起こさない（[ADR-0003](docs/adr/0003-polars-over-pandas.md)） |
-| モデル | LightGBM 分位点回帰 | 表形式・数十万行の規模に適し、分布の仮定なしに区間を出せる（[ADR-0007](docs/adr/0007-quantile-regression.md)）。ディープラーニングを**測定に基づいて退けた**経緯は [ADR-0010](docs/adr/0010-no-deep-learning.md) |
+| モデル | LightGBM 分位点回帰 | 表形式・数十万行の規模に適し、分布の仮定なしに区間を出せる（[ADR-0007](docs/adr/0007-quantile-regression.md)） |
 | 実験管理 | MLflow (SQLite) | ファイルストアは MLflow 3 で非推奨（[ADR-0008](docs/adr/0008-experiment-tracking.md)） |
 | API | FastAPI + Pydantic v2 | スキーマ駆動で入力検証と OpenAPI を同時に得る |
 | 品質 | ruff / mypy strict / pytest | |
