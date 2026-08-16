@@ -79,6 +79,42 @@ def generate_data(
     )
 
 
+@app.command("generate-transactions")
+def generate_transactions_cmd(
+    config: ConfigOption = None,
+    force: Annotated[bool, typer.Option("--force", help="既存ファイルを上書きする")] = False,
+) -> None:
+    """B2B 取引明細（ローデータ）を生成して CSV に保存する。
+
+    需要予測に使う日次データではなく、実務で受け取るのと同じ**集計前の明細**を作る。
+    """
+    from demand_forecast.data.transactions import generate_transactions, summarize
+
+    cfg = _load(config)
+    output = Path(cfg.transactions.output)
+
+    if output.exists() and not force:
+        typer.echo(f"既に存在します: {output}（上書きするには --force）")
+        raise typer.Exit(code=0)
+
+    logger.info(
+        "取引明細を生成します: %s 〜 %s（顧客 %d 社）",
+        cfg.transactions.start_date,
+        cfg.transactions.end_date,
+        cfg.transactions.n_customers,
+    )
+    transactions = generate_transactions(cfg.transactions, seed=cfg.seed)
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    transactions.write_csv(output)
+
+    typer.echo("")
+    typer.echo(f"出力: {output}")
+    typer.echo("=== 検算 ===")
+    for key, value in summarize(transactions, cfg.transactions).items():
+        typer.echo(f"  {key}: {value}")
+
+
 @app.command()
 def train(
     config: ConfigOption = None,

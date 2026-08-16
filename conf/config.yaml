@@ -24,6 +24,18 @@ data:
   n_stores: 3
   n_skus: 6
 
+# B2B 取引明細（ローデータ）の生成設定。
+# 東京の1拠点から関東近県の法人顧客に PC とソフトウェアを販売する想定。
+# ここで作るのは集計前の明細で、日次の系列データへの集計は取り込み側で行う。
+transactions:
+  output: data/raw/transactions.csv
+  start_date: "2022-01-01"
+  end_date: "2024-12-31"
+  # 顧客数。営業日のゼロ率を1割程度に抑えられる水準として設定している
+  n_customers: 80
+  # 部署あたりの営業担当者数（3部署 × 4名 = 12名）
+  reps_per_department: 4
+
 features:
   # 何日先までを予測対象にするか。特徴量のリーク防止もこの値を基準に行う。
   horizon: 14

@@ -46,6 +46,29 @@ class DataConfig(BaseModel):
         return v
 
 
+class TransactionsConfig(BaseModel):
+    """B2B 取引明細（ローデータ）の合成生成の設定。
+
+    需要予測に使う日次データではなく、**集計前の明細**を作るための設定。
+    実務で受け取るのはこの形なので、明細から作り直せるようにしている。
+    """
+
+    output: Path = Path("data/raw/transactions.csv")
+    start_date: dt.date = dt.date(2022, 1, 1)
+    end_date: dt.date = dt.date(2024, 12, 31)
+    n_customers: int = Field(default=80, ge=1)
+    reps_per_department: int = Field(default=4, ge=1)
+
+    @field_validator("end_date")
+    @classmethod
+    def _end_after_start(cls, v: dt.date, info: Any) -> dt.date:
+        start = info.data.get("start_date")
+        if start is not None and v <= start:
+            msg = f"end_date ({v}) は start_date ({start}) より後である必要があります"
+            raise ValueError(msg)
+        return v
+
+
 class FeatureConfig(BaseModel):
     """特徴量生成の設定。
 
@@ -122,6 +145,8 @@ class Config(BaseModel):
     model: ModelConfig
     tuning: TuningConfig
     api: ApiConfig
+    # 既存の設定ファイルを壊さないよう、省略時は既定値で動くようにしている
+    transactions: TransactionsConfig = Field(default_factory=TransactionsConfig)
 
 
 def load_config(path: Path | str | None = None) -> Config:
