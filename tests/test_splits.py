@@ -12,7 +12,7 @@ from itertools import pairwise
 import polars as pl
 import pytest
 
-from demand_forecast.models.splits import expanding_window_folds, split_frame
+from sales_analytics.models.splits import expanding_window_folds, split_frame
 
 
 @pytest.fixture

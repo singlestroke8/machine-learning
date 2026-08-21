@@ -36,8 +36,8 @@ from dataclasses import dataclass
 import numpy as np
 import polars as pl
 
-from demand_forecast.config import TransactionsConfig
-from demand_forecast.features.calendar import japanese_holiday_flags
+from sales_analytics.config import TransactionsConfig
+from sales_analytics.features.calendar import japanese_holiday_flags
 
 BRANCH = "東京本社"
 

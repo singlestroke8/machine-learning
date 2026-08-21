@@ -1,76 +1,25 @@
-# =============================================================================
-# 需要予測システムの設定
+# 販売管理データの生成設定
 #
-# すべての実行パラメータをこの1ファイルに集約している。
-# コード側は pydantic モデル（src/demand_forecast/config.py）で読み込むため、
-# キー名の打ち間違いや型違いは実行前に検出される。
-# =============================================================================
+# ここに置くのは「業務設定として人が決める値」だけ。
+# 分布の形を決める定数は src/sales_analytics/data/masters.py にある。
 
 seed: 42
 
 paths:
-  raw: data/raw/demand.parquet
-  processed: data/processed/train_frame.parquet
+  raw_dir: data/raw
+  processed_dir: data/processed
   model_dir: models
   reports_dir: reports
-  # MLflow 3 系ではファイルストア（./mlruns）が非推奨になったため SQLite を使う。
-  # チームで共有する段階になったら、ここをリモートのトラッキングサーバに向ける。
   mlflow_tracking_uri: sqlite:///mlflow.db
 
-data:
-  # 合成データの生成範囲（docs/adr/0002-synthetic-dataset.md を参照）
-  start_date: "2022-01-01"
-  end_date: "2026-06-30"
-  n_stores: 3
-  n_skus: 6
-
-# B2B 取引明細（ローデータ）の生成設定。
-# 東京の1拠点から関東近県の法人顧客に PC とソフトウェアを販売する想定。
-# ここで作るのは集計前の明細で、日次の系列データへの集計は取り込み側で行う。
 transactions:
-  output: data/raw/transactions.csv
-  start_date: "2022-01-01"
-  end_date: "2024-12-31"
-  # 顧客数。営業日のゼロ率を1割程度に抑えられる水準として設定している
-  n_customers: 80
-  # 部署あたりの営業担当者数（3部署 × 4名 = 12名）
-  reps_per_department: 4
-
-features:
-  # 時間軸の刻み方。daily = 暦日、business = 営業日のみ
-  calendar: daily
-  # 何ステップ先までを予測対象にするか。特徴量のリーク防止もこの値を基準に行う。
-  horizon: 14
-  # 予測基準日（origin）時点で参照するラグ。origin = 予測対象日 - horizon。
-  lags: [1, 2, 3, 7, 14, 28]
-  rolling_windows: [7, 28, 91]
-  # 年周期をなめらかに表現するフーリエ項の次数
-  fourier_yearly_order: 3
-
-cv:
-  # 拡大窓（expanding window）方式の時系列CV。単位はステップ（暦日ではない）
-  n_splits: 3
-  val_steps: 28
-  # 特徴量が origin = t - horizon で打ち切られているため、追加の gap は不要
-  gap_steps: 0
-
-model:
-  # 点予測は q=0.5、予測区間は q=0.1 / q=0.9 で表現する
-  quantiles: [0.1, 0.5, 0.9]
-  params:
-    n_estimators: 400
-    learning_rate: 0.05
-    num_leaves: 63
-    max_depth: -1
-    min_child_samples: 40
-    subsample: 0.9
-    subsample_freq: 1
-    colsample_bytree: 0.8
-    reg_lambda: 1.0
-
-tuning:
-  n_trials: 20
-  timeout_seconds: 600
-
-api:
-  model_path: models/model.joblib
+  # 3年分。年周期を学習するには最低2回、余裕を見て3回ぶん必要
+  start_date: 2022-01-01
+  end_date: 2024-12-31
+  # 顧客単位の課題（離反予測・セグメント）を成立させるための規模
+  n_customers: 200
+  reps_per_department: 5
+  # 期間の途中から取引が始まる顧客の割合
+  new_customer_ratio: 0.25
+  # 期間の途中で取引が先細って止まる顧客の割合
+  churn_ratio: 0.18

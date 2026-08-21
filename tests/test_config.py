@@ -1,7 +1,7 @@
 """設定読み込みのテスト。
 
 リポジトリに入っている本番設定そのものを検証対象に含めている。
-設定ファイルの書き間違いは、学習を回して初めて気づくことが多く、
+設定ファイルの書き間違いは、実行して初めて気づくことが多く、
 そのぶん時間を無駄にするため。
 """
 
@@ -13,79 +13,49 @@ from pathlib import Path
 import pytest
 import yaml
 
-from demand_forecast.config import (
-    Config,
-    FeatureConfig,
-    ModelConfig,
-    load_config,
-)
+from sales_analytics.config import Config, TransactionsConfig, load_config
 
 
 def test_repo_config_is_valid(repo_config: Config) -> None:
     """conf/config.yaml が現在のスキーマで読み込めること。"""
-    assert repo_config.features.horizon >= 1
-    assert 0.5 in repo_config.model.quantiles
+    assert repo_config.transactions.n_customers >= 10
+    assert repo_config.transactions.start_date < repo_config.transactions.end_date
+
+
+def test_repo_config_covers_at_least_two_years(repo_config: Config) -> None:
+    """年周期を学習するには、学習期間に年周期が2回以上必要になる。"""
+    span_days = (repo_config.transactions.end_date - repo_config.transactions.start_date).days
+    assert span_days >= 730, "期間が2年未満だと季節性を学習できない"
 
 
 def test_missing_file_raises(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="設定ファイルが見つかりません"):
-        load_config(tmp_path / "nope.yaml")
+    """設定ファイルが無ければ、その場で分かるように落ちること。"""
+    with pytest.raises(FileNotFoundError):
+        load_config(tmp_path / "no_such_file.yaml")
 
 
-def test_unknown_key_is_rejected(tmp_path: Path, repo_config: Config) -> None:
-    """設定に知らないキーがあったら弾くこと（打ち間違いの検出）。"""
-    payload = yaml.safe_load(
-        (Path(__file__).resolve().parents[1] / "conf" / "config.yaml").read_text(encoding="utf-8")
-    )
-    payload["typo_key"] = 1
+def test_unknown_key_is_rejected(tmp_path: Path) -> None:
+    """設定の書き間違いを黙って無視しないこと。
+
+    未知のキーを許すと、``n_customers`` を ``n_customer`` と書いた場合に
+    既定値のまま動いてしまい、原因を追うのが難しくなる。
+    """
     path = tmp_path / "config.yaml"
-    path.write_text(yaml.safe_dump(payload), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="typo_key"):
+    path.write_text(yaml.safe_dump({"seed": 1, "unknown_section": {}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown_section"):
         load_config(path)
 
 
-def test_end_date_must_follow_start_date() -> None:
-    from demand_forecast.config import DataConfig
-
-    with pytest.raises(ValueError, match="より後である必要があります"):
-        DataConfig(
-            start_date=dt.date(2026, 1, 1),
-            end_date=dt.date(2025, 1, 1),
-            n_stores=1,
-            n_skus=1,
-        )
+def test_end_date_must_be_after_start_date() -> None:
+    """期間が逆転していたら、生成前に弾くこと。"""
+    with pytest.raises(ValueError, match="end_date"):
+        TransactionsConfig(start_date=dt.date(2024, 1, 1), end_date=dt.date(2023, 1, 1))
 
 
-def test_lags_are_deduplicated_and_sorted() -> None:
-    cfg = FeatureConfig(
-        horizon=7, lags=[7, 1, 1, 2], rolling_windows=[28, 7], fourier_yearly_order=1
-    )
-    assert cfg.lags == [1, 2, 7]
-    assert cfg.rolling_windows == [7, 28]
+def test_churn_and_new_ratio_cannot_consume_everything() -> None:
+    """新規と離反で顧客を食い尽くす設定を弾くこと。
 
-
-def test_non_positive_lag_is_rejected() -> None:
-    with pytest.raises(ValueError, match="1以上"):
-        FeatureConfig(horizon=7, lags=[0, 1], rolling_windows=[7], fourier_yearly_order=1)
-
-
-def test_quantiles_must_include_median() -> None:
-    """点予測に使う 0.5 が無い設定を弾くこと。"""
-    with pytest.raises(ValueError, match=r"0\.5"):
-        ModelConfig(quantiles=[0.1, 0.9], params={})
-
-
-def test_quantiles_must_be_within_open_unit_interval() -> None:
-    with pytest.raises(ValueError, match="0 < q < 1"):
-        ModelConfig(quantiles=[0.0, 0.5], params={})
-
-
-def test_api_settings_read_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    from demand_forecast.config import ApiSettings
-
-    monkeypatch.setenv("DFC_MODEL_PATH", "/tmp/some_model.joblib")
-    monkeypatch.setenv("DFC_LOG_LEVEL", "DEBUG")
-    settings = ApiSettings()
-    assert settings.model_path == Path("/tmp/some_model.joblib")
-    assert settings.log_level == "DEBUG"
+    通しで取引のある顧客が居なくなると、比較の基準が無くなる。
+    """
+    with pytest.raises(ValueError, match="大きすぎます"):
+        TransactionsConfig(new_customer_ratio=0.5, churn_ratio=0.5)

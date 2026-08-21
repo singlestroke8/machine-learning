@@ -20,9 +20,8 @@ import numpy as np
 import polars as pl
 from lightgbm import LGBMRegressor
 
-from demand_forecast.config import FeatureConfig
-from demand_forecast.features.pipeline import SeriesEncoder, categorical_features
-from demand_forecast.logging_utils import get_logger
+from sales_analytics.logging_utils import get_logger
+from sales_analytics.models.encoding import CategoricalEncoder, categorical_features
 
 logger = get_logger(__name__)
 
@@ -127,12 +126,14 @@ class ForecastArtifact:
 
     モデル単体を保存すると、推論時に「学習時とどの特徴量設定だったか」が
     分からなくなり、静かに間違った前処理で推論する事故につながる。
-    特徴量設定・ID対応表・学習メタデータを同梱して1ファイルにしている。
+    ID対応表と学習メタデータを同梱して1ファイルにしている。
+
+    ``metadata`` に何を入れるかは課題ごとに違う。特徴量の設定・学習日時・
+    CV の結果など、**推論時に「学習時と同じ前処理か」を確認できるもの**を入れる。
     """
 
     model: QuantileForecaster
-    encoder: SeriesEncoder
-    feature_config: FeatureConfig
+    encoder: CategoricalEncoder
     metadata: dict[str, Any] = field(default_factory=dict)
     format_version: int = ARTIFACT_FORMAT_VERSION
 
@@ -154,10 +155,7 @@ class ForecastArtifact:
         """
         file_path = Path(path)
         if not file_path.exists():
-            msg = (
-                f"モデルファイルが見つかりません: {file_path}\n"
-                "先に `uv run dfc train` を実行してください。"
-            )
+            msg = f"モデルファイルが見つかりません: {file_path}\n先に学習を実行してください。"
             raise FileNotFoundError(msg)
 
         artifact = joblib.load(file_path)

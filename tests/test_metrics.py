@@ -11,7 +11,7 @@ import math
 import numpy as np
 import pytest
 
-from demand_forecast.models.metrics import (
+from sales_analytics.models.metrics import (
     bias,
     coverage,
     evaluate_point_forecast,

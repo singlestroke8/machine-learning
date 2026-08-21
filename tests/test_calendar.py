@@ -6,7 +6,7 @@ import datetime as dt
 
 import polars as pl
 
-from demand_forecast.features.calendar import add_calendar_features, japanese_holiday_flags
+from sales_analytics.features.calendar import add_calendar_features, japanese_holiday_flags
 
 
 def test_fixed_holidays_are_detected() -> None:

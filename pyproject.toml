@@ -1,27 +1,21 @@
 [project]
-name = "demand-forecast"
+name = "sales-analytics"
 version = "0.1.0"
-description = "店舗×商品の日次需要予測システム（学習記録リポジトリ）"
+description = "販売管理データを題材にした機械学習の学習記録リポジトリ"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 
-# --- 推論サーバに必要な最小依存だけをコアに置く ---
-# 学習にしか使わない依存は optional-dependencies["train"] へ分離し、
-# 本番イメージを軽く保つ（docs/adr/0009-split-serving-and-training-deps.md）
 dependencies = [
-    "fastapi>=0.115",
     "joblib>=1.4",
     "lightgbm>=4.5",
     "numpy>=1.26",
     "polars>=1.17",
     "pyarrow>=18",
     "pydantic>=2.10",
-    "pydantic-settings>=2.7",
     "pyyaml>=6.0",
     "scikit-learn>=1.5",
     "typer>=0.15",
-    "uvicorn[standard]>=0.34",
 ]
 
 [project.optional-dependencies]
@@ -32,11 +26,10 @@ train = [
 ]
 
 [project.scripts]
-dfc = "demand_forecast.cli:app"
+sales = "sales_analytics.cli:app"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28",
     "mypy>=1.14",
     "pytest>=8.3",
     "pytest-cov>=6.0",
@@ -49,7 +42,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/demand_forecast"]
+packages = ["src/sales_analytics"]
 
 # ---------------------------------------------------------------------------
 # Lint / Format
@@ -114,7 +107,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src/demand_forecast"]
+source = ["src/sales_analytics"]
 omit = ["*/cli.py"]
 
 [tool.coverage.report]

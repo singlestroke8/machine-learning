@@ -20,16 +20,12 @@
 [`decision-log.md`](decision-log.md) に別立てで記録している。
 ADR が「何を選んだか」を書くのに対し、こちらは「AIの提案にどう介入したか」を残す。
 
-加えて、学習を回すたびに自動生成される成果物がある。
-
 | ファイル | 内容 |
 | --- | --- |
-| [`../reports/model_card.md`](../reports/model_card.md) | モデルの素性と使用上の注意（自動生成） |
-| [`../reports/metrics.json`](../reports/metrics.json) | 評価指標の生データ（自動生成） |
 | [`experiments.md`](experiments.md) | 試した手法と結果の一覧（手で更新） |
 
-`reports/` 直下は小売（暦日軸）の結果、`reports/b2b/` は法人取引（営業日軸）の結果。
-出力先は設定ファイルの `paths.reports_dir` で切り替わる。
+**モデルの成果物（モデルカード・評価指標）は、いまは存在しない。**
+2026-08-21 の目的変更でデータ基盤から作り直しており、課題①の実装で再び生成される。
 
 ## 設計判断（ADR）
 
