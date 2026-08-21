@@ -116,5 +116,36 @@ def check_data(config: ConfigOption = None) -> None:
         raise typer.Exit(code=1)
 
 
+@app.command("train-landing")
+def train_landing(
+    config: ConfigOption = None,
+    save_model: Annotated[bool, typer.Option("--save-model", help="モデルを保存する")] = False,
+) -> None:
+    """課題①: 売上の着地予測を学習・評価する。
+
+    「今日時点で、今月はいくらで着地するか」を予測する。
+    ベースラインとの比較を同じ検証データで行い、勝てたかどうかを表示する。
+    """
+    import polars as pl
+
+    from sales_analytics.tasks.landing.train import format_summary, run_training
+
+    cfg = _load(config)
+    path = cfg.paths.raw_dir / "transactions.csv"
+    if not path.exists():
+        typer.echo(f"{path} がありません。先に `sales generate` を実行してください。")
+        raise typer.Exit(code=1)
+
+    summary = run_training(
+        pl.read_csv(path, try_parse_dates=True),
+        reports_dir=cfg.paths.reports_dir,
+        model_path=(cfg.paths.model_dir / "landing.joblib") if save_model else None,
+    )
+    typer.echo("")
+    typer.echo(format_summary(summary))
+    typer.echo("")
+    typer.echo(f"詳細: {cfg.paths.reports_dir / 'landing_metrics.json'}")
+
+
 if __name__ == "__main__":
     app()
