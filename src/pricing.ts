@@ -14,7 +14,7 @@ type Price = { input: number; output: number; cacheRead: number };
 
 // satisfies で「全モデル分そろっているか」を検査しつつ、各値の型は具体的なまま残す
 export const PRICES = {
-  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1 },
   "claude-haiku-4-5": { input: 1, output: 5, cacheRead: 0.1 },
 } satisfies Record<ModelId, Price>;
 
