@@ -22,15 +22,19 @@
   },
   "homepage": "https://github.com/singlestroke8/machine-learning#readme",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.134.0"
+    "@anthropic-ai/sdk": "^0.134.0",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
   "allowScripts": {
-    "esbuild@0.28.2": true
+    "esbuild@0.28.2": true,
+    "pg@8.23.1": true,
+    "fsevents@2.3.3": true
   }
 }
