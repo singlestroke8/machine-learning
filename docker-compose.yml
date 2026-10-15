@@ -1,0 +1,40 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: rag-db
+    environment:
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+      POSTGRES_DB: rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Python ツール用コンテナ。ホストに Python パッケージを入れない。
+  # 通常は起動せず、`make py ARGS="scripts/xxx.py"` で都度実行する。
+  py:
+    build: ./docker/python
+    container_name: rag-py
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://rag:rag@db:5432/rag
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - .:/work
+    working_dir: /work
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+
+volumes:
+  pgdata:
