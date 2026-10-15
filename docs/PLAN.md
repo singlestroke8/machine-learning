@@ -12,16 +12,14 @@
 
 目的: 開発・検証・デプロイに必要な環境と認証情報を揃える。
 
-- [ ] Node 22、Docker（Compose v2）、AWS CLI が入っている
-- [ ] `aws sts get-caller-identity` が通る（リージョン ap-northeast-1）
-- [ ] Lambda 実行ロール（AWSLambdaBasicExecutionRole のみ）を作り、ARN を `.env` に記入
-- [ ] `.env.example` を `.env` にコピーし、ANTHROPIC_API_KEY・VOYAGE_API_KEY を記入
-- [ ] `make setup` が通る（pre-commit 登録、イメージ取得）
-- [ ] `make db-up` → `make psql` で `\dx` に vector が出る
+- [x] Node 22、Docker（Compose v2）、AWS CLI が入っている
+- [x] `aws sts get-caller-identity` が通る（リージョン ap-northeast-1）
+- [x] Lambda 実行ロール（AWSLambdaBasicExecutionRole のみ）を作り、ARN を `.env` に記入
+- [x] `.env.example` を `.env` にコピーし、ANTHROPIC_API_KEY・VOYAGE_API_KEY を記入
+- [x] `make setup` が通る（pre-commit 登録、イメージ取得）
+- [x] `make db-up` → `make psql` で `\dx` に vector が出る
 
 完了条件: 上のすべてにチェックが付く。
-
-メモ:
 
 ---
 
