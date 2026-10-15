@@ -27,8 +27,8 @@
 
 目的: TS のビルド環境を整え、Claude の SSE をサーバ側で受け取れることを確認する。
 
-- [ ] `npm init`、TypeScript、esbuild、`@anthropic-ai/sdk` を導入（`npx`、ホストにグローバル導入しない）
-- [ ] `tsconfig.json`（strict、ESM、target ES2022）
+- [x] `npm init`、TypeScript、esbuild、`@anthropic-ai/sdk` を導入（`npx`、ホストにグローバル導入しない）
+- [x] `tsconfig.json`（strict、ESM、target ES2022）
 - [ ] `src/llm.ts`: `messages.stream()` を `for await` で読み、テキスト差分を標準出力へ逐次書き出す
 - [ ] TS SDK で temperature を渡せるか確認し、結果を `docs/notes.md` に 1 行記録
 - [ ] モデル ID（claude-sonnet-5-5 / claude-haiku-4-5）と料金を公式ドキュメントで確認し、`src/pricing.ts` に定数化
@@ -38,6 +38,14 @@
 
 メモ:
 
+```
+git switch -c phase1-ts-setup
+node -v
+npm init -y
+npm pkg set type=module
+npm install @anthropic-ai/sdk
+npm install -D typescript esbuild tsx @types/node
+```
 ---
 
 ## Phase 2: ナレッジベース構築（pgvector）
