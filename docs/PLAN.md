@@ -29,14 +29,14 @@
 
 - [x] `npm init`、TypeScript、esbuild、`@anthropic-ai/sdk` を導入（`npx`、ホストにグローバル導入しない）
 - [x] `tsconfig.json`（strict、ESM、target ES2022）
-- [ ] `src/llm.ts`: `messages.stream()` を `for await` で読み、テキスト差分を標準出力へ逐次書き出す
-- [ ] TS SDK で temperature を渡せるか確認し、結果を `docs/notes.md` に 1 行記録
-- [ ] モデル ID（claude-sonnet-5-5 / claude-haiku-4-5）と料金を公式ドキュメントで確認し、`src/pricing.ts` に定数化
-- [ ] `usage` から input_tokens / output_tokens / cache_read_input_tokens を取り出し、円換算して表示
+- [x] `src/llm.ts`: `messages.stream()` を `for await` で読み、テキスト差分を標準出力へ逐次書き出す
+- [x] TS SDK で temperature を渡せるか確認し、結果を `docs/notes.md` に 1 行記録
+- [x] モデル ID（claude-sonnet-5-5 / claude-haiku-4-5）と料金を公式ドキュメントで確認し、`src/pricing.ts` に定数化
+- [x] `usage` から input_tokens / output_tokens / cache_read_input_tokens を取り出し、円換算して表示
 
 完了条件: `npx tsx src/llm.ts "質問"` で回答が逐次表示され、末尾にトークン数と費用が出る。
 
-メモ:
+メモ: TS のビルド環境
 
 ```
 git switch -c phase1-ts-setup
@@ -46,6 +46,7 @@ npm pkg set type=module
 npm install @anthropic-ai/sdk
 npm install -D typescript esbuild tsx @types/node
 ```
+
 ---
 
 ## Phase 2: ナレッジベース構築（pgvector）
