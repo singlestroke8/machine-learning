@@ -7,8 +7,8 @@ RAG アプリケーションの中核を TypeScript で再実装し、精度評�
 - 開発・検証はローカルの Docker（Postgres + pgvector、Python ツール用コンテナ）で行い、配信は AWS Lambda（レスポンスストリーミング）へデプロイする。
 
 ## 作業の約束
-- TypeScript のコードには設計意図を短くコメントで添える（型の選び方、async/await、`for await` による SSE の読み方など）。
-- Python（KB 構築・評価スクリプト）は説明コメントを最小にする。
+- TypeScript のコードには設計意図をコメントで添える（型の選び方、async/await、`for await` による SSE の読み方など）。
+- Python（KB 構築・評価スクリプト）は説明コメントも適切な量で添える。
 - ホスト環境を汚さない。Python は Docker コンテナ（`make py`）、Node は `npx`。
 - 鍵はチャットに貼らない。`.env`（gitignore 済み）か `read -s` で渡す。Lambda では環境変数に置く。
 - コミット前に鍵の混入を確認する（`scripts/check-secrets.sh`。`make setup` で pre-commit に登録される）。
@@ -72,6 +72,7 @@ logs/        usage.jsonl（gitignore）
 - system に cache_control を付け、cache_read_input_tokens が増えることを確認する。
 - Lambda からはローカル DB に届かないため、ベクトル同梱の `kb.json` を全件比較にする。理由と「本番は RDS に置き換える」方針を README に書く。
 - Embedding は voyage-3.5-lite と voyage-3.5 を同じ次元（256）で比較し、結果を見て採用を決める。
+  256 は本番からの引き継ぎで根拠の記録がないため、採用モデルで 1024 も 1 回測り、256 を選ぶ根拠を README に残す。
 
 ## 事前準備
 - Node 22、Docker（Compose v2）、AWS CLI（`aws sts get-caller-identity` が通る、ap-northeast-1）
